@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PT — Phase ALPHA Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --royal: #1e3a8a; --royal-dark: #152a66; --royal-light: #2d4ea8; --royal-soft: #eaefff;
+  --gold: #c9a44a; --gold-dark: #a8862f; --gold-light: #f4ebd0;
+  --white: #ffffff; --ink: #0f1b3d;
+  --slate: #4a5578; --muted: #8a93af;
+  --border: #e4e8f3; --border-light: #eff1f8;
+  --bg-alt: #f7f8fc; --bg-hover: #eef1f9;
+  --critical: #a91e3f; --critical-bg: #fdeef2;
+  --success: #216e4e; --success-bg: #e6f4ea;
+  --amber: #b57d00; --amber-bg: #fdf4d8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-font-smoothing: antialiased; }
+body { font-family: 'Inter', system-ui, sans-serif; color: var(--ink); background: var(--bg-alt); font-size: 14px; line-height: 1.55; }
+
+.pt-mark { width: 32px; height: 32px; background: linear-gradient(135deg, var(--royal) 0%, var(--royal-dark) 100%); color: var(--gold); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; border: 1.5px solid var(--gold); }
+.pt-mark-lg { width: 56px; height: 56px; font-size: 22px; border-radius: 10px; }
+
+/* LOGIN */
+.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--royal) 0%, var(--royal-dark) 100%); padding: 20px; }
+.login-card { background: white; border-radius: 14px; padding: 40px; max-width: 580px; width: 100%; box-shadow: 0 25px 70px rgba(0,0,0,0.3); border-top: 4px solid var(--gold); }
+.login-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+.login-head h1 { font-size: 26px; font-weight: 800; color: var(--royal); letter-spacing: -0.03em; }
+.login-tagline { font-size: 13px; color: var(--muted); margin-bottom: 24px; margin-left: 70px; }
+.login-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 14px; }
+
+.corp-email-notice { background: var(--gold-light); border-left: 3px solid var(--gold); padding: 10px 14px; border-radius: 5px; font-size: 11px; color: var(--royal-dark); margin-bottom: 16px; line-height: 1.5; }
+
+.login-options { display: flex; flex-direction: column; gap: 10px; }
+.login-option { padding: 18px 20px; border: 1.5px solid var(--border); border-radius: 10px; background: white; cursor: pointer; text-align: left; transition: all 0.15s; font-family: inherit; display: flex; align-items: center; gap: 16px; }
+.login-option:hover { border-color: var(--royal); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(30,58,138,0.12); }
+.login-icon { width: 44px; height: 44px; background: var(--royal-soft); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--royal); font-weight: 800; font-size: 16px; flex-shrink: 0; }
+.login-option:hover .login-icon { background: var(--gold); color: var(--royal-dark); }
+.login-option-name { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+.login-option-sub { font-size: 12px; color: var(--slate); }
+.login-footer { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); text-align: center; }
+.login-footer a { color: var(--royal); text-decoration: none; font-weight: 600; }
+
+/* APP */
+.app { display: none; }
+.app.active { display: block; }
+.top-bar { background: white; border-bottom: 2px solid var(--gold); padding: 10px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.brand-block { display: flex; align-items: center; gap: 12px; }
+.wordmark { font-weight: 800; font-size: 17px; color: var(--royal); letter-spacing: -0.02em; }
+.workspace-tag { font-size: 10px; color: var(--white); background: var(--royal); font-family: 'JetBrains Mono', monospace; padding: 3px 8px; border-radius: 3px; font-weight: 600; }
+.tier-badge { font-size: 10px; padding: 3px 8px; background: var(--gold); color: var(--royal-dark); border-radius: 3px; font-weight: 700; margin-left: 4px; }
+.user-chip { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--bg-alt); border-radius: 20px; font-size: 12px; border: 1px solid var(--border); }
+.user-avatar { width: 26px; height: 26px; background: var(--royal); color: var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+.user-name { font-weight: 600; color: var(--ink); }
+.user-role { color: var(--muted); font-size: 11px; }
+.logout-btn { margin-left: 8px; padding: 5px 12px; background: transparent; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; cursor: pointer; color: var(--slate); font-weight: 500; }
+
+.layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 58px); }
+.sidebar { background: white; border-right: 1px solid var(--border); padding: 20px 12px; }
+.sidebar-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; padding: 8px 12px; margin-top: 14px; }
+.sidebar-section-title:first-child { margin-top: 0; }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; border-radius: 6px; font-size: 13px; color: var(--slate); font-weight: 500; margin-bottom: 2px; }
+.sidebar-item:hover { background: var(--royal-soft); color: var(--royal); }
+.sidebar-item.active { background: var(--royal); color: white; }
+.sidebar-item.active .sidebar-icon { color: var(--gold); }
+.sidebar-icon { font-size: 14px; width: 16px; display: inline-flex; justify-content: center; }
+
+.main { padding: 22px 28px; background: var(--bg-alt); min-height: calc(100vh - 58px); }
+.page-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.page-title { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; color: var(--royal); }
+.page-sub { font-size: 13px; color: var(--slate); margin-top: 2px; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.kpi-tile { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 5px; }
+.kpi-value { font-size: 22px; font-weight: 800; color: var(--royal); line-height: 1.1; }
+.kpi-unit { font-size: 11px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.kpi-sub { font-size: 10px; color: var(--slate); margin-top: 4px; }
+
+.card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 14px; }
+.card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid var(--gold); }
+.card-title { font-size: 14px; font-weight: 800; color: var(--royal); }
+.card-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th { text-align: left; padding: 10px 12px; background: var(--bg-alt); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--border); }
+.table td { padding: 11px 12px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+
+.badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.b-success { background: var(--success-bg); color: var(--success); }
+.b-amber { background: var(--amber-bg); color: var(--amber); }
+.b-critical { background: var(--critical-bg); color: var(--critical); }
+.b-royal { background: var(--royal-soft); color: var(--royal); }
+.b-gold { background: var(--gold-light); color: var(--gold-dark); }
+
+.btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: white; color: var(--ink); font-family: inherit; }
+.btn:hover { border-color: var(--royal); color: var(--royal); }
+.btn-primary { background: var(--royal); color: white; border-color: var(--royal); }
+.btn-primary:hover { background: var(--royal-dark); color: var(--gold); }
+.btn-gold { background: var(--gold); color: var(--royal-dark); border-color: var(--gold); }
+
+/* VAULT */
+.vault-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.vault-cat { background: white; border: 1px solid var(--border); border-radius: 7px; padding: 14px; cursor: pointer; }
+.vault-cat:hover { border-color: var(--royal); }
+.vault-cat-name { font-size: 12px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.vault-cat-count { font-size: 10px; color: var(--muted); }
+.vault-cat-status { margin-top: 10px; display: flex; gap: 6px; }
+.vault-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* BD/CRM */
+.pipeline-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.pipeline-col { background: white; border: 1px solid var(--border); border-radius: 7px; padding: 12px; min-height: 300px; }
+.pipeline-col-head { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--royal); margin-bottom: 10px; display: flex; justify-content: space-between; }
+.pipeline-col-count { background: var(--royal-soft); color: var(--royal); padding: 2px 8px; border-radius: 10px; font-size: 10px; }
+.opp-card { background: var(--bg-alt); border-left: 3px solid var(--royal); border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer; font-size: 11px; position: relative; }
+.opp-card:hover { background: var(--royal-soft); }
+.opp-card.hot { border-left-color: var(--gold); }
+.opp-name { font-weight: 700; color: var(--ink); margin-bottom: 2px; font-size: 12px; }
+.opp-meta { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.opp-value { font-size: 11px; color: var(--royal); font-weight: 700; }
+.opp-owner { position: absolute; top: 8px; right: 8px; font-size: 9px; background: var(--royal); color: var(--gold); padding: 1px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.03em; }
+
+/* CRM LOCK Modal */
+.lock-modal-wrap { background: rgba(21, 42, 102, 0.6); position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.lock-modal { background: white; border-radius: 12px; max-width: 540px; width: 100%; padding: 28px; border-top: 4px solid var(--critical); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.lock-icon { width: 48px; height: 48px; background: var(--critical-bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--critical); font-size: 22px; font-weight: 800; margin-bottom: 14px; }
+.lock-title { font-size: 18px; font-weight: 800; color: var(--critical); margin-bottom: 8px; }
+.lock-body { font-size: 13px; color: var(--slate); line-height: 1.7; margin-bottom: 18px; }
+.lock-highlight { background: var(--critical-bg); padding: 12px 14px; border-radius: 6px; font-size: 12px; margin: 12px 0; color: var(--ink); }
+.lock-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* MOBILE */
+.phone-frame { max-width: 320px; margin: 0 auto; background: var(--ink); padding: 20px 8px; border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+.phone-screen { background: white; border-radius: 20px; overflow: hidden; min-height: 480px; }
+.phone-header { background: var(--royal); color: white; padding: 12px; display: flex; justify-content: space-between; }
+.phone-body { padding: 14px; }
+.phone-field { margin-bottom: 10px; }
+.phone-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.phone-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; font-family: inherit; }
+
+.ph-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 50px 20px; text-align: center; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .pipeline-board { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-head">
+      <div class="pt-mark pt-mark-lg">PT</div>
+      <h1>Platform</h1>
+    </div>
+    <div class="login-tagline">India commercial real estate · secure · simple</div>
+
+    <div class="corp-email-notice">
+      <strong>Corporate email required.</strong> Login requires an email at your company domain (e.g. name@yourcompany.com). Personal emails (gmail, outlook) blocked unless approved by AA / N8 / PT admin.
+    </div>
+
+    <div class="login-title">Who are you?</div>
+    <div class="login-options">
+      <button class="login-option" onclick="loginAs('owner')">
+        <div class="login-icon">O</div>
+        <div><div class="login-option-name">Owner</div><div class="login-option-sub">You own one or more commercial buildings</div></div>
+      </button>
+      <button class="login-option" onclick="loginAs('occupier')">
+        <div class="login-icon">C</div>
+        <div><div class="login-option-name">Occupier</div><div class="login-option-sub">Your company rents office space</div></div>
+      </button>
+      <button class="login-option" onclick="loginAs('direct')">
+        <div class="login-icon">D</div>
+        <div><div class="login-option-name">Direct</div><div class="login-option-sub">You are a broker, consultant, or fit-out partner</div></div>
+      </button>
+    </div>
+
+    <div class="login-footer">
+      Phase ALPHA pilot · Enterprise security from Day 1 · <a href="#" onclick="loginAs('internal'); return false;">Internal team login</a>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="top-bar">
+    <div class="brand-block">
+      <div class="pt-mark">PT</div>
+      <span class="wordmark">Platform</span>
+      <span class="workspace-tag" id="workspaceTag">DEMO</span>
+      <span class="tier-badge" id="tierBadge"></span>
+    </div>
+    <div class="user-chip">
+      <div class="user-avatar" id="userAvatar">O</div>
+      <div><div class="user-name" id="userName">—</div><div class="user-role" id="userRole">—</div></div>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main" id="mainContent"></main>
+  </div>
+</div>
+
+<!-- CRM LOCK Modal (hidden by default) -->
+<div id="lockModal" style="display: none;"></div>
+
+<script>
+let currentUser = null;
+
+function loginAs(role) {
+  const users = {
+    owner:    { name: 'Prestige Group', role: 'Owner', avatar: 'O', tag: 'OWNER', tier: 'Pilot' },
+    occupier: { name: 'Acme GCC India', role: 'Occupier', avatar: 'C', tag: 'OCCUPIER', tier: 'Pilot' },
+    direct:   { name: 'Rohan Shah', role: 'Direct · Agent', avatar: 'D', tag: 'DIRECT', tier: 'Pilot' },
+    internal: { name: 'Priya Mehta · N8', role: 'Internal · N8 BD', avatar: 'PM', tag: 'INTERNAL · N8', tier: 'BD' },
+  };
+  currentUser = { role, ...users[role] };
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  document.getElementById('userName').textContent = currentUser.name;
+  document.getElementById('userRole').textContent = currentUser.role;
+  document.getElementById('userAvatar').textContent = currentUser.avatar;
+  document.getElementById('workspaceTag').textContent = currentUser.tag;
+  document.getElementById('tierBadge').textContent = currentUser.tier;
+  renderSidebar();
+  if (role === 'owner') showPage('own-dashboard');
+  else if (role === 'occupier') showPage('occ-dashboard');
+  else if (role === 'direct') showPage('dir-profile');
+  else if (role === 'internal') showPage('int-bd');
+}
+
+function logout() {
+  currentUser = null;
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').classList.remove('active');
+}
+
+function renderSidebar() {
+  const sb = document.getElementById('sidebar');
+  if (currentUser.role === 'Owner') {
+    sb.innerHTML = `
+      <div class="sidebar-section-title">Portfolio</div>
+      <div class="sidebar-item active" data-page="own-dashboard" onclick="navTo('own-dashboard')"><span class="sidebar-icon">▣</span> Dashboard</div>
+      <div class="sidebar-item" data-page="own-leases" onclick="navTo('own-leases')"><span class="sidebar-icon">≡</span> Leases</div>
+      <div class="sidebar-section-title">Vault</div>
+      <div class="sidebar-item" data-page="own-vault" onclick="navTo('own-vault')"><span class="sidebar-icon">◫</span> Compliance Vault</div>
+      <div class="sidebar-item" data-page="own-reminders" onclick="navTo('own-reminders')"><span class="sidebar-icon">◉</span> Reminders</div>
+      <div class="sidebar-section-title">Security</div>
+      <div class="sidebar-item" data-page="own-sharing" onclick="navTo('own-sharing')"><span class="sidebar-icon">⇆</span> Sharing & Access</div>
+    `;
+  } else if (currentUser.role === 'Occupier') {
+    sb.innerHTML = `
+      <div class="sidebar-section-title">Portfolio</div>
+      <div class="sidebar-item active" data-page="occ-dashboard" onclick="navTo('occ-dashboard')"><span class="sidebar-icon">▣</span> Dashboard</div>
+      <div class="sidebar-item" data-page="occ-vault" onclick="navTo('occ-vault')"><span class="sidebar-icon">◫</span> Compliance Vault</div>
+    `;
+  } else if (currentUser.role === 'Direct · Agent') {
+    sb.innerHTML = `
+      <div class="sidebar-section-title">My Profile</div>
+      <div class="sidebar-item active" data-page="dir-profile" onclick="navTo('dir-profile')"><span class="sidebar-icon">◍</span> Profile</div>
+      <div class="sidebar-item" data-page="dir-search" onclick="navTo('dir-search')"><span class="sidebar-icon">⌕</span> Directory</div>
+    `;
+  } else {
+    sb.innerHTML = `
+      <div class="sidebar-section-title">BD / Pre-Mandate</div>
+      <div class="sidebar-item active" data-page="int-bd" onclick="navTo('int-bd')"><span class="sidebar-icon">◆</span> Pipeline</div>
+      <div class="sidebar-item" data-page="int-newopp" onclick="navTo('int-newopp')"><span class="sidebar-icon">+</span> New Opportunity</div>
+      <div class="sidebar-item" data-page="int-mobile" onclick="navTo('int-mobile')"><span class="sidebar-icon">📱</span> Mobile Log</div>
+      <div class="sidebar-section-title">CRM / Post-Mandate</div>
+      <div class="sidebar-item" data-page="int-crm" onclick="navTo('int-crm')"><span class="sidebar-icon">★</span> Active Mandates</div>
+      <div class="sidebar-item" data-page="int-contacts" onclick="navTo('int-contacts')"><span class="sidebar-icon">◍</span> Contacts</div>
+    `;
+  }
+}
+
+function navTo(page) {
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+  showPage(page);
+}
+
+function showPage(page) {
+  const main = document.getElementById('mainContent');
+  const map = {
+    'own-dashboard': ownerDashboard, 'own-leases': ownerLeases, 'own-vault': ownerVault, 'own-reminders': remindersPage, 'own-sharing': sharingPage,
+    'occ-dashboard': occDashboard, 'occ-vault': occVault,
+    'dir-profile': dirProfile, 'dir-search': dirSearch,
+    'int-bd': bdPipeline, 'int-newopp': newOppPage, 'int-mobile': bdMobile, 'int-crm': crmMandates, 'int-contacts': contactsPage,
+  };
+  main.innerHTML = (map[page] || placeholder)();
+}
+
+// Lock Modal — shows when Priya tries to add Google India (already tagged to Rahul)
+function showLockModal() {
+  const modal = document.getElementById('lockModal');
+  modal.innerHTML = `
+    <div class="lock-modal-wrap">
+      <div class="lock-modal">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-title">Account Already Tagged</div>
+        <div class="lock-body">
+          <strong>Google India</strong> is already an active account with:
+          <div class="lock-highlight">
+            <strong>Rohan Shah</strong> (AA Senior Partner)<br>
+            Last activity: 3 October 2026 · 47 days of activity · Pipeline stage: Proposal
+          </div>
+          Before you proceed, you must request access from Rohan.
+          <br><br>
+          <strong>CRM Ownership Lock</strong> prevents duplicate outreach — protects client trust, prevents internal collisions, keeps attribution clean.
+        </div>
+        <div class="lock-actions">
+          <button class="btn" onclick="closeLockModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="requestAccess()">Request Access from Rohan</button>
+        </div>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'block';
+}
+function requestAccess() {
+  const modal = document.getElementById('lockModal');
+  modal.innerHTML = `
+    <div class="lock-modal-wrap">
+      <div class="lock-modal" style="border-top-color: var(--success);">
+        <div class="lock-icon" style="background: var(--success-bg); color: var(--success);">✓</div>
+        <div class="lock-title" style="color: var(--success);">Request Sent</div>
+        <div class="lock-body">
+          Access request sent to <strong>Rohan Shah</strong>. He has 48 hours to approve, decline, or propose co-ownership.
+          <div class="lock-highlight" style="background: var(--royal-soft); color: var(--royal);">
+            If no response in 48 hours, request auto-escalates to AA/N8 team leads.
+          </div>
+          You'll be notified via email + in-app. Until then, you cannot log activity on Google India.
+        </div>
+        <div class="lock-actions">
+          <button class="btn btn-primary" onclick="closeLockModal()">Got it</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function closeLockModal() {
+  document.getElementById('lockModal').style.display = 'none';
+}
+
+// ============ OWNER ============
+function ownerDashboard() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Welcome, Prestige Group</div><div class="page-sub">6 buildings · 3.0M sqft · 94 tenants · Phase ALPHA pilot</div></div><button class="btn btn-gold">+ Upload Documents</button></div>
+    <div class="kpi-grid">
+      <div class="kpi-tile"><div class="kpi-label">Total Area</div><div class="kpi-value">3.0<span class="kpi-unit">M sqft</span></div><div class="kpi-sub">Across 6 assets</div></div>
+      <div class="kpi-tile"><div class="kpi-label">Occupancy</div><div class="kpi-value">89.5<span class="kpi-unit">%</span></div><div class="kpi-sub">Target 95%</div></div>
+      <div class="kpi-tile"><div class="kpi-label">Monthly Revenue</div><div class="kpi-value">₹3.2<span class="kpi-unit">Cr</span></div><div class="kpi-sub">₹38.4 Cr annual</div></div>
+      <div class="kpi-tile"><div class="kpi-label">WALE</div><div class="kpi-value">4.2<span class="kpi-unit">yrs</span></div><div class="kpi-sub">Weighted avg lease expiry</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">What needs attention</div><div class="card-sub">3 items this week</div></div></div>
+      <div style="padding: 10px 0; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+        <div><strong>Fire NOC — Tech Platina</strong> expires in 45 days <span class="badge b-critical" style="margin-left: 8px;">Statutory</span></div>
+        <button class="btn btn-primary">Upload renewal</button>
+      </div>
+      <div style="padding: 10px 0; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
+        <div><strong>JP Morgan lease</strong> renewal window opens — 11 months to expiry <span class="badge b-amber" style="margin-left: 8px;">Lease</span></div>
+        <button class="btn">Start renewal</button>
+      </div>
+      <div style="padding: 10px 0; display: flex; justify-content: space-between; align-items: center;">
+        <div><strong>Property tax 2026-27</strong> receipt pending upload <span class="badge b-gold" style="margin-left: 8px;">Vault</span></div>
+        <button class="btn">Add document</button>
+      </div>
+    </div>
+  `;
+}
+
+function ownerLeases() {
+  const leases = [
+    ['Microsoft India', 'Tech Platina', '125k', '₹95', '2028-03-15', 'Active'],
+    ['Accenture', 'Tech Platina', '180k', '₹92', '2027-11-30', 'Active'],
+    ['Oracle', 'Shantiniketan', '210k', '₹88', '2029-06-01', 'Active'],
+    ['JP Morgan', 'Shantiniketan', '95k', '₹115', '2027-09-20', 'Renewal Due'],
+    ['Goldman Sachs', 'Khoday Tower', '68k', '₹125', '2028-12-15', 'Active'],
+  ];
+  return `
+    <div class="page-title-row"><div><div class="page-title">Leases</div></div></div>
+    <div class="card"><table class="table"><thead><tr><th>Tenant</th><th>Building</th><th>Area</th><th>Rent</th><th>Expiry</th><th>Status</th></tr></thead>
+    <tbody>${leases.map(l => `<tr><td style="font-weight:600;">${l[0]}</td><td>${l[1]}</td><td>${l[2]}</td><td>${l[3]}</td><td>${l[4]}</td><td><span class="badge b-${l[5]==='Renewal Due'?'critical':'success'}">${l[5]}</span></td></tr>`).join('')}</tbody></table></div>
+  `;
+}
+
+function ownerVault() {
+  const categories = [
+    { name: 'Fire NOC', count: '6 docs · 1 expiring', s: ['green', 'green', 'green', 'green', 'green', 'amber'] },
+    { name: 'Occupancy Certificate', count: '6 docs · all current', s: ['green', 'green', 'green', 'green', 'green', 'green'] },
+    { name: 'Structural Safety', count: '5 docs · 1 missing', s: ['green', 'green', 'green', 'green', 'green', 'critical'] },
+    { name: 'Property Tax', count: '6 docs · all current', s: ['green', 'green', 'green', 'green', 'green', 'green'] },
+    { name: 'Pollution Board NOC', count: '6 docs · 1 expired', s: ['green', 'green', 'green', 'critical', 'green', 'green'] },
+    { name: 'Lift Inspection', count: '6 docs · all current', s: ['green', 'green', 'green', 'green', 'green', 'green'] },
+    { name: 'Building Insurance', count: '6 docs · 2 expiring', s: ['green', 'amber', 'green', 'green', 'amber', 'green'] },
+    { name: 'Title Deed', count: '6 docs · archive', s: ['green', 'green', 'green', 'green', 'green', 'green'] },
+    { name: 'Trade Licence', count: '4 docs · 2 missing', s: ['green', 'green', 'green', 'green', 'critical', 'critical'] },
+    { name: 'Rainwater Harvesting', count: '6 docs · 1 expiring', s: ['green', 'green', 'green', 'amber', 'green', 'green'] },
+    { name: 'Elevator OEM Records', count: '6 docs · all current', s: ['green', 'green', 'green', 'green', 'green', 'green'] },
+  ];
+  return `
+    <div class="page-title-row"><div><div class="page-title">Compliance Vault</div><div class="page-sub">11 categories · 65 documents · Never deleted, only archived on expiry</div></div><div style="display: flex; gap: 8px;"><button class="btn">+ Add Category</button><button class="btn btn-gold">+ Upload</button></div></div>
+    <div class="vault-grid">
+      ${categories.map(c => `<div class="vault-cat"><div class="vault-cat-name">${c.name}</div><div class="vault-cat-count">${c.count}</div><div class="vault-cat-status">${c.s.map(s => `<div class="vault-status-dot" style="background: var(--${s === 'green' ? 'success' : s === 'amber' ? 'amber' : 'critical'});"></div>`).join('')}</div></div>`).join('')}
+      <div class="vault-cat" style="border: 2px dashed var(--border); background: var(--bg-alt); display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="font-size: 24px; color: var(--muted);">+</div><div style="font-size: 11px; color: var(--muted); font-weight: 600;">Add compliance category</div></div>
+    </div>
+  `;
+}
+
+function remindersPage() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Reminders</div><div class="page-sub">You choose timing · Default suggested · Change anytime</div></div></div>
+    <div class="card">
+      ${[
+        { name: 'Fire NOC — Tech Platina', expiry: '15 Mar 2027', def: '3 months', type: 'Statutory' },
+        { name: 'JP Morgan lease', expiry: '20 Sep 2027', def: '12 months', type: 'Lease' },
+        { name: 'Building insurance — Khoday', expiry: '31 Dec 2026', def: '3 months', type: 'Insurance' },
+      ].map(r => `
+        <div style="padding: 14px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <div><div style="font-weight: 700; font-size: 13px;">${r.name}</div><div style="font-size: 11px; color: var(--muted);">Expires: ${r.expiry}</div></div>
+            <span class="badge b-royal">${r.type}</span>
+          </div>
+          <div style="font-size: 10px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; font-weight: 700;">Remind me:</div>
+          <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+            ${['7 days', '30 days', '3 months', '6 months', '12 months', '18 months', 'Custom'].map(t => `<button class="btn ${t===r.def?'btn-primary':''}" style="padding: 4px 9px; font-size: 11px;">${t}${t===r.def?' ✓':''}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+function sharingPage() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Sharing & Access</div><div class="page-sub">Share by email · 3 permission levels · Revocable anytime</div></div></div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">Share a document or folder</div></div></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">EMAIL</div><input class="phone-input" placeholder="lawyer@firm.com"></div>
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">ACCESS</div><select class="phone-input"><option>View only</option><option>Comment</option><option>Upload / Edit</option></select></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">EXPIRES</div><select class="phone-input"><option>7 days</option><option>30 days</option><option>90 days</option><option>Custom</option><option>Never</option></select></div>
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">SCOPE</div><select class="phone-input"><option>Single document</option><option>Folder</option><option>Category</option></select></div>
+      </div>
+      <button class="btn btn-gold" style="margin-top: 14px;">Send Access Email</button>
+    </div>
+  `;
+}
+
+// ============ OCCUPIER ============
+function occDashboard() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Welcome, Acme GCC India</div><div class="page-sub">4 offices · 4 cities · 2,670 employees</div></div></div>
+    <div class="kpi-grid">
+      <div class="kpi-tile"><div class="kpi-label">Total Area</div><div class="kpi-value">267<span class="kpi-unit">k sqft</span></div></div>
+      <div class="kpi-tile"><div class="kpi-label">Monthly Rent</div><div class="kpi-value">₹2.74<span class="kpi-unit">Cr</span></div></div>
+      <div class="kpi-tile"><div class="kpi-label">Cost / Employee</div><div class="kpi-value">₹1.23<span class="kpi-unit">L</span></div><div class="kpi-sub">Annual</div></div>
+      <div class="kpi-tile"><div class="kpi-label">Next Renewal</div><div class="kpi-value">15<span class="kpi-unit">mo</span></div><div class="kpi-sub">Gurgaon</div></div>
+    </div>
+    <div class="card"><div class="card-header"><div><div class="card-title">Portfolio</div></div></div>
+      <table class="table"><thead><tr><th>Office</th><th>City</th><th>Area</th><th>Headcount</th><th>Monthly Rent</th><th>Expiry</th></tr></thead>
+      <tbody>
+        <tr><td>Tech Platina</td><td>Bangalore</td><td>85k</td><td>850</td><td>₹80.75 L</td><td>Aug 2027</td></tr>
+        <tr><td>DLF Cybercity</td><td>Gurgaon</td><td>62k</td><td>620</td><td>₹73.16 L</td><td>Dec 2026</td></tr>
+        <tr><td>Mindspace Airoli</td><td>Mumbai</td><td>48k</td><td>480</td><td>₹68.16 L</td><td>Mar 2029</td></tr>
+        <tr><td>RMZ Nexity</td><td>Hyderabad</td><td>72k</td><td>720</td><td>₹51.84 L</td><td>Jun 2028</td></tr>
+      </tbody></table></div>
+  `;
+}
+
+function occVault() {
+  const cats = [
+    { name: 'Lease Deed', count: '4 docs', s: ['green', 'green', 'green', 'green'] },
+    { name: 'GST Registration', count: '4 docs · 1 expiring', s: ['green', 'green', 'amber', 'green'] },
+    { name: 'Trade Licence', count: '4 docs', s: ['green', 'green', 'green', 'green'] },
+    { name: 'Shop & Establishment', count: '4 docs', s: ['green', 'green', 'green', 'green'] },
+    { name: 'Fire NOC (fit-out)', count: '3 docs · 1 missing', s: ['green', 'green', 'green', 'critical'] },
+    { name: 'Office Insurance', count: '4 docs · 1 expiring', s: ['green', 'green', 'green', 'amber'] },
+    { name: 'Fit-out Approvals', count: '4 docs', s: ['green', 'green', 'green', 'green'] },
+    { name: 'Deposit Receipts', count: '4 docs', s: ['green', 'green', 'green', 'green'] },
+  ];
+  return `
+    <div class="page-title-row"><div><div class="page-title">Compliance Vault</div></div><div style="display: flex; gap: 8px;"><button class="btn">+ Add Category</button><button class="btn btn-gold">+ Upload</button></div></div>
+    <div class="vault-grid">
+      ${cats.map(c => `<div class="vault-cat"><div class="vault-cat-name">${c.name}</div><div class="vault-cat-count">${c.count}</div><div class="vault-cat-status">${c.s.map(s => `<div class="vault-status-dot" style="background: var(--${s === 'green' ? 'success' : s === 'amber' ? 'amber' : 'critical'});"></div>`).join('')}</div></div>`).join('')}
+      <div class="vault-cat" style="border: 2px dashed var(--border); background: var(--bg-alt); display: flex; flex-direction: column; align-items: center; justify-content: center;"><div style="font-size: 24px; color: var(--muted);">+</div><div style="font-size: 11px; color: var(--muted); font-weight: 600;">Add compliance category</div></div>
+    </div>
+  `;
+}
+
+// ============ DIRECT ============
+function dirProfile() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Rohan Shah</div><div class="page-sub">Senior Broker · 11 years · 9 verified deals</div></div></div>
+    <div class="card">Profile with verified transaction history (10 deals), LinkedIn-verified experience, counterparty-approved deals. Covered in detail in earlier demos.</div>
+  `;
+}
+function dirSearch() {
+  return `<div class="page-title-row"><div><div class="page-title">Directory</div></div></div><div class="card">Search verified brokers and enablers.</div>`;
+}
+
+// ============ INTERNAL BD/CRM ============
+function bdPipeline() {
+  return `
+    <div class="page-title-row">
+      <div><div class="page-title">BD Pipeline — Priya's View</div><div class="page-sub">N8 BD team · Shows only Priya's accounts + unclaimed opportunities</div></div>
+      <button class="btn btn-gold" onclick="navTo('int-newopp')">+ New Opportunity</button>
+    </div>
+    <div style="padding: 10px 14px; background: var(--royal-soft); border-left: 3px solid var(--royal); border-radius: 5px; font-size: 12px; color: var(--royal-dark); margin-bottom: 14px; line-height: 1.5;">
+      <strong>CRM Ownership Lock active.</strong> You can only see accounts you own + unclaimed accounts. Accounts owned by other BD team members are hidden. Click "+ New Opportunity" to see what happens when you try to add an already-tagged account.
+    </div>
+    <div class="pipeline-board">
+      <div class="pipeline-col">
+        <div class="pipeline-col-head">Prospect <span class="pipeline-col-count">3</span></div>
+        <div class="opp-card"><div class="opp-owner">PM</div><div class="opp-name">Flipkart</div><div class="opp-meta">N8 · HQ relocation</div><div class="opp-value">₹35 L potential</div></div>
+        <div class="opp-card"><div class="opp-owner">PM</div><div class="opp-name">Walmart Global Tech</div><div class="opp-meta">N8 · Bengaluru expansion</div><div class="opp-value">₹50 L</div></div>
+        <div class="opp-card"><div class="opp-owner">PM</div><div class="opp-name">Myntra Design</div><div class="opp-meta">N8 · Office consolidation</div><div class="opp-value">₹28 L</div></div>
+      </div>
+      <div class="pipeline-col">
+        <div class="pipeline-col-head">Qualified <span class="pipeline-col-count">2</span></div>
+        <div class="opp-card hot"><div class="opp-owner">PM</div><div class="opp-name">Deutsche Bank India</div><div class="opp-meta">N8 · GCC expansion</div><div class="opp-value">₹45 L · 50% prob</div></div>
+        <div class="opp-card"><div class="opp-owner">PM</div><div class="opp-name">Shell Trading</div><div class="opp-meta">N8 · 2-city setup</div><div class="opp-value">₹32 L · 40% prob</div></div>
+      </div>
+      <div class="pipeline-col">
+        <div class="pipeline-col-head">Proposal <span class="pipeline-col-count">1</span></div>
+        <div class="opp-card hot"><div class="opp-owner">PM</div><div class="opp-name">Standard Chartered</div><div class="opp-meta">N8 · Bangalore GCC</div><div class="opp-value">₹30 L · 85% prob</div></div>
+      </div>
+      <div class="pipeline-col">
+        <div class="pipeline-col-head">Negotiation <span class="pipeline-col-count">0</span></div>
+      </div>
+      <div class="pipeline-col" style="background: var(--success-bg);">
+        <div class="pipeline-col-head" style="color: var(--success);">Won <span class="pipeline-col-count" style="background: var(--success); color: white;">1</span></div>
+        <div class="opp-card" style="background: white;"><div class="opp-owner" style="background: var(--success); color: white;">PM</div><div class="opp-name">Acme GCC India</div><div class="opp-meta">N8 · 4-city portfolio</div><div class="opp-value" style="color: var(--success);">₹65 L · Signed 15 Jan</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 14px;">
+      <div class="card-header"><div><div class="card-title">Accounts owned by other BD team members (hidden to you)</div><div class="card-sub">14 accounts owned by other BD people. Request access before engaging any.</div></div></div>
+      <table class="table">
+        <thead><tr><th>Account</th><th>Owner</th><th>Last activity</th><th></th></tr></thead>
+        <tbody>
+          <tr><td style="font-weight: 600;">Google India</td><td>Rohan Shah · AA</td><td>3 Oct 2026 (4 days ago)</td><td><button class="btn btn-primary" style="font-size: 11px;" onclick="showLockModal()">Request access</button></td></tr>
+          <tr><td style="font-weight: 600;">Prestige Group</td><td>Rohan Shah · AA</td><td>22 Mar 2026 (active)</td><td><button class="btn" style="font-size: 11px;">Request access</button></td></tr>
+          <tr><td style="font-weight: 600;">Embassy Group</td><td>Jyoti Gupta · AA</td><td>5 Oct 2026 (2 days ago)</td><td><button class="btn" style="font-size: 11px;">Request access</button></td></tr>
+          <tr><td style="font-weight: 600;">Microsoft India</td><td>Rohan Shah · AA</td><td>8 Oct 2026 (today)</td><td><button class="btn" style="font-size: 11px;">Request access</button></td></tr>
+          <tr><td style="font-weight: 600;">Byju's</td><td>— (released, 125 days inactive)</td><td>5 Jun 2026</td><td><button class="btn btn-gold" style="font-size: 11px;">Claim account</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function newOppPage() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">New Opportunity</div><div class="page-sub">PT checks ownership before you proceed · CRM Lock active</div></div></div>
+    <div class="card">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">COMPANY NAME *</div><input class="phone-input" value="Google India" id="newOppName"></div>
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">LEAD CONTACT</div><input class="phone-input" placeholder="e.g. Priya Krishnan"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">DEAL TYPE</div><select class="phone-input"><option>New office</option><option>Expansion</option><option>Renewal</option><option>Relocation</option></select></div>
+        <div><div style="font-size: 10px; font-weight: 700; color: var(--muted); margin-bottom: 4px;">MANDATE POTENTIAL (₹ L)</div><input class="phone-input" placeholder="e.g. 55"></div>
+      </div>
+      <div style="padding: 14px; background: var(--amber-bg); border-radius: 6px; margin-bottom: 14px; font-size: 12px; color: var(--amber); line-height: 1.6;">
+        <strong>Ownership check runs on save.</strong> PT searches for existing accounts matching company name. If a match is found, you'll be prompted to request access from the current owner.
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn">Save Draft</button>
+        <button class="btn btn-gold" onclick="showLockModal()">Save & Check Ownership</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">Example: Try adding "Google India"</div><div class="card-sub">Google India is already tagged to Rohan Shah (AA). Clicking "Save & Check Ownership" above will trigger the CRM Ownership Lock dialog.</div></div></div>
+      <div style="padding: 14px; background: var(--royal-soft); border-radius: 6px; font-size: 12px; color: var(--slate); line-height: 1.7;">
+        <strong style="color: var(--royal);">What happens:</strong><br>
+        1. PT detects Google India is active in CRM<br>
+        2. Shows lock dialog identifying current owner<br>
+        3. Offers "Request Access" workflow<br>
+        4. Current owner (Rohan) gets notification — 48 hours to approve/decline/co-own<br>
+        5. If no response, auto-escalates to AA/N8 team leads<br>
+        6. You cannot log activity on Google India until resolved
+      </div>
+    </div>
+  `;
+}
+
+function bdMobile() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Mobile Log Preview</div><div class="page-sub">Field teams log meetings in 5 taps · CRM Lock applies on mobile too</div></div></div>
+    <div class="phone-frame">
+      <div class="phone-screen">
+        <div class="phone-header"><div style="font-weight: 700; font-size: 13px;">PT · Log Meeting</div><div style="font-size: 11px;">●●●</div></div>
+        <div class="phone-body">
+          <div class="phone-field"><div class="phone-label">Account</div><select class="phone-input"><option>Deutsche Bank · N8 (yours)</option><option>Standard Chartered · N8 (yours)</option><option>+ Other (ownership check runs)</option></select></div>
+          <div class="phone-field"><div class="phone-label">Contact met</div><select class="phone-input"><option>Rajesh Kulkarni · RE Lead</option></select></div>
+          <div class="phone-field"><div class="phone-label">Where</div><select class="phone-input"><option>Their office</option><option>Our office</option><option>Site visit</option></select></div>
+          <div class="phone-field"><div class="phone-label">Outcome</div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;"><button class="btn btn-primary" style="font-size: 11px;">Positive</button><button class="btn" style="font-size: 11px;">Neutral</button></div></div>
+          <div class="phone-field"><div class="phone-label">Next step reminder</div><div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;"><button class="btn btn-primary" style="font-size: 11px;">3 days</button><button class="btn" style="font-size: 11px;">7 days</button><button class="btn" style="font-size: 11px;">Custom</button></div></div>
+          <button class="btn btn-gold" style="width: 100%; margin-top: 10px;">Save Meeting</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function crmMandates() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">Active Mandates</div></div></div>
+    <div class="card">
+      <table class="table"><thead><tr><th>Client</th><th>Team</th><th>Owner</th><th>Signed</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight: 600;">Acme GCC India</td><td>N8</td><td>PM (Priya)</td><td>15 Jan 2026</td><td><span class="badge b-success">On track</span></td></tr>
+        <tr><td style="font-weight: 600;">Standard Chartered</td><td>N8</td><td>PM (Priya)</td><td>22 Mar 2026</td><td><span class="badge b-success">On track</span></td></tr>
+      </tbody></table>
+    </div>
+  `;
+}
+
+function contactsPage() {
+  return `
+    <div class="page-title-row"><div><div class="page-title">My Contacts</div><div class="page-sub">Only shows contacts of accounts you own</div></div></div>
+    <div class="card">Contact book filtered by ownership. Non-owners cannot see contact details of accounts assigned to others.</div>
+  `;
+}
+
+function placeholder() {
+  return `<div class="ph-card"><div class="pt-mark pt-mark-lg" style="margin: 0 auto 16px;">PT</div><div style="font-size: 15px; font-weight: 700; color: var(--royal);">Page coming soon</div></div>`;
+}
+</script>
+</body>
+</html>
