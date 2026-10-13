@@ -1,4 +1,5 @@
-// Entity model — names follow the Alpha PRD (§5). Generated data lives in data/mockData.json.
+// Read-only demo dataset (parks/blocks/floors/leases) from data/mockData.json.
+// Phase 2-3 replace these with the PRD asset & leasing entities (Campus, Building, BuildingFloor, Lease…).
 
 export type OrgType = 'PropTattva' | 'Owner' | 'Occupier' | 'Enabler'
 export type PlanCode = 'OWNER_STARTER' | 'OWNER_GROWTH' | 'OWNER_ENTERPRISE'
@@ -122,11 +123,4 @@ export interface Dataset {
   availability: Availability[]
   occupiers: Occupier[]
   transactions: Transaction[]
-}
-
-/** Who is looking — the simulated session. */
-export type Role = 'admin' | 'owner'
-export interface Scope {
-  role: Role
-  ownerId: string
 }

@@ -44,7 +44,16 @@ First task: confirm the structure, generate `mockData` from the demo dataset, sc
 ---
 
 ## Project layout (as built)
-- The app lives in `app/`. Run `cd app && npm run dev`. The repo root `index.html` and `PT_Demo_v6.html` are the live GitHub Pages demo (CNAME proptattva.com), so don't overwrite them.
-- Data source: `docs/PropTattva_Demo_Data.json` → `app/scripts/build_mock_data.py` (`npm run mock-data`) → `app/src/data/mockData.json`. The script cleans up export problems: junk occupier names, merged-cell fill-down, "Total" rows, and stacking vacancies that duplicate owner listings.
-- `app/src/data/api.ts` is the only module that reads mock data, and it applies the row scoping (admin sees everything, an owner sees only its own parks). Screens never import the JSON directly.
-- `app/src/state/AppContext.tsx` holds the role, owner, public lens and navigation, all in memory.
+- The app lives in `app/`. Run `cd app && npm run dev`. The repo root `index.html` (landing page) and `PT_Demo_v6.html` are served by GitHub Pages (CNAME proptattva.com); the Pages workflow publishes the app at `/app/`.
+- `app/src/data/api.ts` is the mock server and the only way screens touch data. It enforces role × row scope × field visibility × plan limits, removing hidden fields from responses, and writes the audit log. To swap in a real backend, re-implement this file.
+- `app/src/data/store.ts` holds platform records in localStorage (`pt-demo-db`, versioned; bump `VERSION` when the shape changes). Seed data is in `data/seed.ts`.
+- `app/src/access/policy.ts` encodes PRD §7: the role × action matrix, per-field visibility rules, features and quotas.
+- `app/src/entities/registry.ts` defines each PRD entity once: fields, enums, validation, visibility, delete blockers, related lists. The shared components in `components/crud/` (EntityPage, EntityTable, RecordDrawer, fields) render any registered entity. To add an entity: add its type in `domain/`, its collection in the store, and its definition in the registry.
+- Routing is hash-based (`state/router.ts`). The session (signed-in user, optional View-as actor) is in `state/SessionContext.tsx`.
+- The legacy park demo data still comes from `docs/PropTattva_Demo_Data.json` → `app/scripts/build_mock_data.py` → `app/src/data/mockData.json`, read through `data/legacy.ts`. It is replaced by the PRD asset entities in Phase 2.
+
+## Decisions (Oct 2026)
+- **Persistence:** demo edits are saved to browser localStorage, with a "Reset demo data" button. This overrides the "no localStorage" rule above. It is still frontend-only: no backend and no fetch.
+- **Build plan:** the PRD entities get schema-driven CRUD in 4 phases: (1) foundation + admin console, (2) asset registry E1, (3) leasing/financials/stacking E2–E4, (4) mandate/parking/portfolio E5–E7. Each phase ends with a click-through for feedback.
+- **v6 look and flows:** the React app uses PT_Demo_v6's royal + gold look and persona login. v6's Compliance Vault, Reminders and Sharing fold into BuildingDocument; its BD pipeline and CRM lock go under AA.
+- **Sample values:** fields the demo DB lacks (lease commercials/dates, doc validity, etc.) get deterministic, clearly labelled sample values.
