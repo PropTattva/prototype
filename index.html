@@ -76,6 +76,10 @@
     .cta:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
     .cta span { transition: transform 0.15s; }
     .cta:hover span { transform: translateX(3px); }
+    .cta-secondary { background: #fff; color: var(--ink); }
+    .cta-secondary:hover { background: var(--ink); color: #fff; }
+    .cta small { font-size: 11px; font-weight: 400; opacity: 0.65; letter-spacing: 0.02em; }
+    .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
     .status { font-size: 13px; font-weight: 500; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; }
 
     footer {
@@ -105,7 +109,10 @@
     <h1>A proprietary data and intelligence platform being built for commercial real estate.</h1>
     <p class="sub">Details in due course.</p>
     <div class="actions">
-      <a class="cta" href="PT_Demo_v6.html">Access Demo <span aria-hidden="true">→</span></a>
+      <div class="ctas">
+        <a class="cta" href="app/">Access Demo v2 <small>Platform</small> <span aria-hidden="true">→</span></a>
+        <a class="cta cta-secondary" href="PT_Demo_v6.html">Access Demo v1 <small>Concept</small> <span aria-hidden="true">→</span></a>
+      </div>
       <span class="status">Building now</span>
     </div>
   </main>
