@@ -20,15 +20,19 @@ export type Action = 'C' | 'R' | 'U' | 'D'
  * mandated   — AA: records on buildings under an active mandate (§7.2 "*")
  * published  — occupiers / brokers: records on published buildings, public entities only
  * own-broker — broker log rows registered by the viewer's firm
+ * own-user   — BD pipeline (CRM ownership lock): own + co-owned + unclaimed accounts
  */
-export type RowScope = 'all' | 'own-org' | 'own-scope' | 'mandated' | 'published' | 'own-broker'
+export type RowScope = 'all' | 'own-org' | 'own-scope' | 'mandated' | 'published' | 'own-broker' | 'own-user'
 export interface Grant {
   actions: Action[]
   scope: RowScope
 }
 
 /** §7.2 capability rows used by Phase 1 entities. Absent role = no access ("–"). */
-export type Capability = 'organisations' | 'org_users' | 'plans' | 'subscriptions' | 'audit' | 'buildings' | 'leases' | 'invoices' | 'broker_log' | 'occupiers'
+export type Capability =
+  | 'organisations' | 'org_users' | 'plans' | 'subscriptions' | 'audit'
+  | 'buildings' | 'leases' | 'invoices' | 'broker_log' | 'occupiers'
+  | 'mandates' | 'aa_only' | 'vendors' | 'bd'
 
 const CRUD: Action[] = ['C', 'R', 'U', 'D']
 const CRU: Action[] = ['C', 'R', 'U']
@@ -104,6 +108,28 @@ export const CAPABILITIES: Record<Capability, Partial<Record<Role, Grant>>> = {
     'Owner/Developer': { actions: CRU, scope: 'all' },
     // Brokers register introductions for their clients, so they can look up and add occupiers.
     Enabler: { actions: CR, scope: 'all' },
+  },
+  // §7.2 "Mandate / assessment / SWOT": owners read their own mandates (AA-only fields stripped).
+  mandates: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRUD, scope: 'all' },
+    'Owner/Developer': { actions: R, scope: 'own-org' },
+  },
+  // §7.1 "AA team only" records: assessment scorecard, target occupier (shadow) lists.
+  aa_only: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRUD, scope: 'mandated' },
+  },
+  // Vendors engaged on mandates / campuses (E5-S02).
+  vendors: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRU, scope: 'all' },
+    'Owner/Developer': { actions: R, scope: 'all' },
+  },
+  // v6 BD pipeline with the CRM ownership lock: each AA/N8 user works their own accounts.
+  bd: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRUD, scope: 'own-user' },
   },
 }
 

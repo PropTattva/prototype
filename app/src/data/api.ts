@@ -5,10 +5,15 @@ import { can, canSeeField, featureLabel, FEATURES, grantFor, type Action } from 
 import type { Session } from '../access/session'
 import type { Building } from '../domain/assets'
 import type { Lease } from '../domain/leasing'
+import type { AccessRequest, Mandate, Opportunity, PricingInputs, Swot } from '../domain/mandates'
+import type { Bay, ParkingRate, SlotType } from '../domain/parking'
 import type { AuditEntry, Invite, PlatformDb, User } from '../domain/platform'
 import { REGISTRY, seatUsage } from '../entities/registry'
 import type { EntityDef, EntityKey, OptionCtx, Rec } from '../entities/types'
-import { addMonths, daysFromToday, quarterOf, todayIso } from '../lib/dates'
+import { ASSESSMENT_TEMPLATE, assessmentScore, gradeBand } from '../lib/assessment'
+import { addDays, addMonths, daysBetween, daysFromToday, quarterOf, todayIso } from '../lib/dates'
+import { priceModel } from '../lib/pricing'
+import { suggestSwot } from '../lib/swot'
 import { readDb, resetDb, writeDb } from './store'
 
 export type ApiErrorCode = 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'QUOTA' | 'PLAN' | 'CONFLICT' | 'READ_ONLY' | 'AUTH'
@@ -50,6 +55,14 @@ const COLLECTION: Record<EntityKey, keyof PlatformDb> = {
   rent: 'rent_invoices',
   brokerLog: 'broker_log',
   relationshipLog: 'relationship_log',
+  mandate: 'mandates',
+  vendor: 'vendors',
+  targetOccupier: 'target_occupiers',
+  assessment: 'assessments',
+  assessmentCriterion: 'assessment_criteria',
+  opportunity: 'opportunities',
+  bay: 'bays',
+  parkingRate: 'parking_rates',
 }
 
 const rows = (db: PlatformDb, key: EntityKey) => db[COLLECTION[key]] as unknown as Rec[]
@@ -139,7 +152,11 @@ const SYSTEM: User = { user_id: 'SYSTEM', org_id: 'ORG-PT', name: 'System', emai
 
 /** Facts needed to decide mandated / published scope, computed once per request. */
 interface ScopeFacts {
+  /** AA may read: active mandate not run internally by the owner (E5-S01/S02) */
   mandated: Set<string>
+  /** AA may act: active mandate executed by the AA team or hybrid */
+  mandatedWrite: Set<string>
+  assessmentBuilding: Map<string, string>
   published: Set<string>
   leaseBuilding: Map<string, string>
   floorBuilding: Map<string, string>
@@ -150,7 +167,9 @@ function scopeFacts(db: PlatformDb): ScopeFacts {
   const campusBuildings = new Map<string, string[]>()
   for (const b of db.buildings) if (b.campus_id) campusBuildings.set(b.campus_id, [...(campusBuildings.get(b.campus_id) ?? []), b.building_id])
   return {
-    mandated: new Set(db.mandates.filter((m) => m.status === 'Active').map((m) => m.building_id)),
+    mandated: new Set(db.mandates.filter((m) => m.status === 'Active' && m.exec_mode !== 'Internal (owner team)').map((m) => m.building_id)),
+    mandatedWrite: new Set(db.mandates.filter((m) => m.status === 'Active' && (m.exec_mode === 'AA team' || m.exec_mode === 'Hybrid')).map((m) => m.building_id)),
+    assessmentBuilding: new Map(db.assessments.map((a) => [a.assessment_id, a.building_id])),
     published: new Set(db.buildings.filter((b) => b.published && b.status !== 'Inactive').map((b) => b.building_id)),
     leaseBuilding: new Map(db.leases.map((l) => [l.lease_id, l.building_id])),
     floorBuilding: new Map(db.floors.map((f) => [f.floor_id, f.building_id])),
@@ -174,6 +193,10 @@ function buildingsOf(def: EntityDef, rec: Rec, f: ScopeFacts): string[] {
     case 'self-campus':
     case 'campus':
       return f.campusBuildings.get(rec.campus_id) ?? []
+    case 'assessment': {
+      const b = f.assessmentBuilding.get(rec.assessment_id)
+      return b ? [b] : []
+    }
     default:
       return []
   }
@@ -196,6 +219,8 @@ function inRowScope(def: EntityDef, s: Session, rec: Rec, f: ScopeFacts) {
       return !!def.publicReadable && buildingsOf(def, rec, f).some((b) => f.published.has(b)) && (def.publicRowFilter?.(rec) ?? true)
     case 'own-broker':
       return rec.broker_org_id === s.org.org_id
+    case 'own-user':
+      return rec.owner_user_id == null || rec.owner_user_id === s.user.user_id || (rec.co_owners ?? []).includes(s.user.user_id) || isReleased(rec)
     default:
       return false
   }
@@ -263,6 +288,20 @@ function lockOwnership(def: EntityDef, s: Session, draft: Rec) {
   const scope = grantFor(def.capability, s.role)?.scope
   if (scope === 'own-org' && def.orgKey) draft[def.orgKey] = s.org.org_id
   if (scope === 'own-broker') draft.broker_org_id = s.org.org_id
+  if (scope === 'own-user') draft.owner_user_id = s.user.user_id
+}
+
+/** AA can read mandated buildings, but act only where the mandate is executed by AA or hybrid (E5-S02). */
+function requireActable(def: EntityDef, s: Session, rec: Rec, f: ScopeFacts) {
+  if (grantFor(def.capability, s.role)?.scope !== 'mandated') return
+  if (!buildingsOf(def, rec, f).some((b) => f.mandatedWrite.has(b)))
+    throw new ApiError('FORBIDDEN', 'Leasing on this building is executed by the owner or an external agency — AA has read-only access under this mandate.')
+}
+
+/** BD accounts with no activity for 120 days are released and can be claimed (v6 CRM lock). */
+const RELEASE_DAYS = 120
+function isReleased(o: Rec) {
+  return o.owner_user_id != null && o.last_activity && Date.now() - new Date(o.last_activity).getTime() > RELEASE_DAYS * 86_400_000
 }
 
 /** Every visible collection, scoped and projected for the viewer — ignores plan gating (lookups only). */
@@ -292,6 +331,9 @@ function scopedCtx(s: Session, db: PlatformDb): OptionCtx {
     occupiers: visible('occupier', s, db, f) as OptionCtx['occupiers'],
     leases: visible('lease', s, db, f) as OptionCtx['leases'],
     documents: visible('document', s, db, f) as OptionCtx['documents'],
+    mandates: visible('mandate', s, db, f) as OptionCtx['mandates'],
+    vendors: visible('vendor', s, db, f) as OptionCtx['vendors'],
+    directory: internal ? db.buildings.map((b) => ({ building_id: b.building_id, name: b.name, org_id: b.org_id, campus_id: b.campus_id })) : [],
     users: s.role === 'Super Admin' ? db.users : db.users.filter((u) => u.org_id === s.org.org_id || (s.role === 'AA' && u.org_id === 'ORG-PT')),
   }
 }
@@ -410,6 +452,7 @@ export async function create(key: EntityKey, input: Rec, s: Session): Promise<Re
   // The new record must land inside the creator's own scope (own org, mandated building, own firm).
   if (grantFor(def.capability, s.role)?.scope !== 'all' && !inRowScope(def, s, draft, scopeFacts(db)))
     throw new ApiError('FORBIDDEN', `You can only add ${def.plural.toLowerCase()} within your own scope.`)
+  requireActable(def, s, draft, scopeFacts(db))
   validate(def, db, draft, 'create', null, s)
 
   if ((key === 'user' && draft.status !== 'Disabled') || key === 'invite') requireSeat(db, draft.org_id)
@@ -444,6 +487,7 @@ export async function update(key: EntityKey, id: string, patch: Rec, s: Session)
   const f = scopeFacts(db)
   const original = rows(db, key).find((r) => r[def.idKey] === id)
   if (!original || !inRowScope(def, s, original, f)) throw new ApiError('NOT_FOUND', `${def.label} not found.`)
+  requireActable(def, s, original, f)
   const seen = project(def, s, original, f)
   const mandated = s.role === 'AA' && isMandated(def, original, f)
 
@@ -484,6 +528,7 @@ export async function remove(key: EntityKey, id: string, s: Session): Promise<vo
   const db = readDb()
   const rec = rows(db, key).find((r) => r[def.idKey] === id)
   if (!rec || !inRowScope(def, s, rec, scopeFacts(db))) throw new ApiError('NOT_FOUND', `${def.label} not found.`)
+  requireActable(def, s, rec, scopeFacts(db))
   if (key === 'user' && id === s.actor.user_id) throw new ApiError('CONFLICT', 'You cannot delete your own account.')
   const blockers = def.blockers?.(rec, db) ?? []
   if (blockers.length) throw new ApiError('CONFLICT', `Cannot delete: referenced by ${blockers.join(', ')}. ${def.deleteHint ?? ''}`.trim())
@@ -655,6 +700,8 @@ export interface StackCell {
   rent: number | null
   expiry: string | null
   vacancy_days: number | null
+  /** E6-S05: bays allocated to the lease on this floor */
+  parking: number | null
 }
 
 /** E4-S03: floor-by-floor stacking plan, tenant masked for anyone who cannot read leases. */
@@ -697,6 +744,7 @@ export async function stackingPlan(buildingIds: string[], s: Session) {
             rent: lease?.rent ?? null,
             expiry: lease?.expiry ?? null,
             vacancy_days: f.vacant_since ? -daysFromToday(f.vacant_since) : null,
+            parking: lease ? db.bays.filter((x) => x.lease_id === lease.lease_id).length : null,
           }
         })
       return { building: b, cells }
@@ -836,3 +884,466 @@ export async function exportCsv(key: EntityKey, data: Rec[], s: Session): Promis
   }
   return [cols.join(','), ...data.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n')
 }
+
+// ---------------------------------------------------------------- grade (E1-S03/S04)
+
+/** Owner self-serve calculator: indicative only, and never overrides an AA scorecard grade. */
+export async function applyIndicativeGrade(buildingId: string, grade: string, s: Session) {
+  requireWritable(s)
+  requireGrant(REGISTRY.building, s, 'U')
+  const b = (await get('building', buildingId, s)) as Building
+  if (b.grade_source === 'AA scorecard' && s.role !== 'Super Admin' && s.role !== 'AA')
+    throw new ApiError('CONFLICT', 'This building is graded by the AA scorecard; the calculator result stays indicative and cannot replace it.')
+  writeDb((d) => {
+    const x = d.buildings.find((y) => y.building_id === buildingId)!
+    const before = { grade: x.grade, grade_source: x.grade_source }
+    Object.assign(x, { grade, grade_source: 'Indicative (calculator)', grade_assessed_at: now() })
+    d.audit_log.push(audit(s.actor, x.org_id, 'Building', buildingId, x.name, 'Update', before, { grade, grade_source: x.grade_source }))
+  })
+}
+
+// ---------------------------------------------------------------- mandates (E5)
+
+function mandateFor(id: string, s: Session) {
+  return get('mandate', id, s) as Promise<Mandate>
+}
+
+/** E5-S02 / E2-S02: the owner decides how leasing is executed and sets the threshold NOI on their own mandate. */
+export async function setOwnerTerms(mandateId: string, patch: { exec_mode?: string; vendor_id?: string | null; threshold_noi?: number | null }, s: Session) {
+  requireWritable(s)
+  const m = await mandateFor(mandateId, s)
+  const internal = s.role === 'Super Admin' || s.role === 'AA'
+  if (!internal && !(s.role === 'Owner/Developer' && m.org_id === s.org.org_id)) throw new ApiError('FORBIDDEN', 'Only the owner of this building can change these terms.')
+  const db = readDb()
+  const original = db.mandates.find((x) => x.mandate_id === mandateId)!
+  const draft = { ...original, ...patch } as Rec
+  REGISTRY.mandate.derive?.(draft, db, 'edit', original as unknown as Rec)
+  const e = REGISTRY.mandate.validate?.(draft, db, 'edit', original as unknown as Rec) ?? {}
+  const errs = Object.fromEntries(Object.entries(e).filter(([, v]) => v)) as Record<string, string>
+  if (Object.keys(errs).length) throw new ApiError('VALIDATION', 'Please fix the highlighted fields.', errs)
+  const change = diff(original as unknown as Rec, draft)
+  if (!Object.keys(change.after).length) return
+  writeDb((d) => {
+    const i = d.mandates.findIndex((x) => x.mandate_id === mandateId)
+    d.mandates[i] = draft as unknown as Mandate
+    d.audit_log.push(audit(s.actor, original.org_id, 'Mandate', mandateId, `Mandate — ${d.buildings.find((b) => b.building_id === original.building_id)?.name}`, 'Update', change.before, change.after))
+  })
+}
+
+function requireAA(s: Session) {
+  requireWritable(s)
+  if (s.role !== 'Super Admin' && s.role !== 'AA') throw new ApiError('FORBIDDEN', 'AA team only.')
+}
+
+function updateMandateField(m: Mandate, s: Session, key: 'swot' | 'pricing_model', value: unknown, label: string) {
+  requireActable(REGISTRY.mandate, s, m as unknown as Rec, scopeFacts(readDb()))
+  writeDb((d) => {
+    const x = d.mandates.find((y) => y.mandate_id === m.mandate_id)!
+    const before = { [key]: x[key] }
+    ;(x as unknown as Rec)[key] = value
+    d.audit_log.push(audit(s.actor, x.org_id, 'Mandate', x.mandate_id, label, 'Update', before, { [key]: value }))
+  })
+}
+
+/** E5-S04: SWOT suggestions generated from PT data (building, floors, leases, comparables, certifications). */
+export async function generateSwot(mandateId: string, s: Session): Promise<Swot> {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  const db = readDb()
+  const b = db.buildings.find((x) => x.building_id === m.building_id)!
+  return suggestSwot(
+    b,
+    db.floors.filter((f) => f.building_id === b.building_id),
+    db.leases.filter((l) => l.building_id === b.building_id),
+    marketMedian(db, b.micro_market),
+    db.certifications.filter((c) => c.building_id === b.building_id).map((c) => `${c.scheme} ${c.level ?? ''}`.trim()),
+  )
+}
+
+export async function saveSwot(mandateId: string, swot: Swot, s: Session) {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  const clean = Object.fromEntries(Object.entries(swot).map(([k, v]) => [k, (v as string[]).map((x) => x.trim()).filter(Boolean)])) as unknown as Swot
+  updateMandateField(m, s, 'swot', clean, 'SWOT updated')
+}
+
+function marketMedian(db: PlatformDb, microMarket: string) {
+  const xs = db.leases
+    .filter((l) => l.status === 'Active' && l.rent != null && db.buildings.find((b) => b.building_id === l.building_id)?.micro_market === microMarket)
+    .map((l) => l.rent!)
+    .sort((a, b) => a - b)
+  return xs.length ? xs[Math.floor(xs.length / 2)] : null
+}
+
+/** Starting inputs for a new pricing version: last version, or market data + the owner's threshold. */
+export async function pricingDefaults(mandateId: string, s: Session): Promise<PricingInputs> {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  const last = m.pricing_model?.versions.at(-1)
+  if (last) return { ...last.inputs, threshold_noi: m.threshold_noi ?? last.inputs.threshold_noi }
+  const db = readDb()
+  const b = db.buildings.find((x) => x.building_id === m.building_id)!
+  const rates = db.parking_rates.filter((r) => r.building_id === b.building_id && r.slot_type === 'Covered')
+  return {
+    market_rent: marketMedian(db, b.micro_market) ?? 100,
+    grade_adj_pct: b.grade === 'A+' ? 5 : b.grade === 'A' ? 0 : -5,
+    floor_plate_adj_pct: 0,
+    vacancy_adj_pct: 0,
+    fitout_adj_pct: 0,
+    rent_free_months: 3,
+    ti_per_sqft: 0,
+    escalation_pct: 5,
+    cam: 18,
+    parking_per_slot: rates.at(-1)?.rate ?? 4500,
+    term_years: 9,
+    threshold_noi: m.threshold_noi ?? 0,
+  }
+}
+
+/** E5-S06: every save creates a new immutable version with its computed output. */
+export async function savePricingVersion(mandateId: string, inputs: PricingInputs, note: string | null, s: Session) {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  const versions = [...(m.pricing_model?.versions ?? [])]
+  versions.push({ version: versions.length + 1, created_at: now(), created_by: s.actor.user_id, inputs, output: priceModel(inputs), note })
+  updateMandateField(m, s, 'pricing_model', { versions }, `Pricing model v${versions.length}`)
+  return versions.at(-1)!
+}
+
+export interface TargetSuggestion {
+  occupier_id: string
+  name: string
+  sector: string
+  score: number
+  reasons: string[]
+}
+
+/** E5-S05: candidate occupiers by market fit. Stands in for live RFP feeds, which the prototype does not have. */
+export async function suggestTargets(mandateId: string, s: Session): Promise<TargetSuggestion[]> {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  const db = readDb()
+  const b = db.buildings.find((x) => x.building_id === m.building_id)!
+  const listed = new Set(db.target_occupiers.filter((t) => t.building_id === b.building_id).map((t) => t.occupier_ref))
+  const inBuilding = new Set(db.leases.filter((l) => l.building_id === b.building_id && l.status === 'Active').map((l) => l.occupier_id))
+  const sectorCount = new Map<string, number>()
+  for (const id of inBuilding) {
+    const o = db.occupiers.find((x) => x.occupier_id === id)
+    if (o) sectorCount.set(o.sector_tag, (sectorCount.get(o.sector_tag) ?? 0) + 1)
+  }
+  const topSectors = [...sectorCount.entries()].sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k]) => k)
+  const horizon = addMonths(todayIso(), 18)
+  const out: TargetSuggestion[] = []
+  for (const o of db.occupiers) {
+    if (listed.has(o.occupier_id) || inBuilding.has(o.occupier_id) || o.occupier_id === 'OC-UNDISCLOSED') continue
+    const reasons: string[] = []
+    let score = 0
+    const expiring = db.leases.find((l) => l.occupier_id === o.occupier_id && l.status === 'Active' && l.expiry <= horizon)
+    if (expiring) {
+      score += 3
+      reasons.push(`Current lease expires ${quarterOf(expiring.expiry)} — likely in the market`)
+    }
+    if (db.broker_log.some((x) => x.occupier_id === o.occupier_id && x.status === 'Registered')) {
+      score += 3
+      reasons.push('Active requirement registered by a broker')
+    }
+    if (o.is_gcc) {
+      score += 2
+      reasons.push('Captive GCC — expansion-led demand')
+    }
+    if (topSectors.includes(o.sector_tag)) {
+      score += 2
+      reasons.push(`${o.sector_tag} cluster already in the building`)
+    }
+    if (db.relationship_log.some((r) => /expansion/i.test(r.summary) && db.leases.find((l) => l.lease_id === r.lease_id)?.occupier_id === o.occupier_id)) {
+      score += 2
+      reasons.push('Expansion appetite noted in the relationship log')
+    }
+    if (score >= 4) out.push({ occupier_id: o.occupier_id, name: o.name, sector: o.sector_tag, score, reasons })
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, 8)
+}
+
+/** Accept adds the suggestion to the target list; reject records it so it is not suggested again. */
+export async function decideSuggestion(mandateId: string, occupierId: string, accept: boolean, s: Session) {
+  requireAA(s)
+  const m = await mandateFor(mandateId, s)
+  return create('targetOccupier', { building_id: m.building_id, occupier_ref: occupierId, status: accept ? 'Identified' : 'Rejected', source: 'Auto-suggested', notes: accept ? null : 'Suggestion rejected' }, s)
+}
+
+// ---------------------------------------------------------------- assessment (E1-S06, E5-S03, E5-S07)
+
+/** Opens a 14-day site audit with the 33-item checklist. */
+export async function startAssessment(buildingId: string, assessor: string, s: Session) {
+  requireAA(s)
+  const db = readDb()
+  if (db.assessments.some((a) => a.building_id === buildingId && a.status === 'Draft'))
+    throw new ApiError('CONFLICT', 'An audit is already in progress for this building.')
+  const today = todayIso()
+  const a = await create('assessment', { building_id: buildingId, assessment_date: today, assessor }, s)
+  writeDb((d) => {
+    const x = d.assessments.find((y) => y.assessment_id === a.assessment_id)!
+    x.status = 'Draft'
+    x.audit_due = addDays(today, 14)
+    ASSESSMENT_TEMPLATE.forEach((t, i) =>
+      d.assessment_criteria.push({ criterion_id: `${a.assessment_id}-${String(i + 1).padStart(2, '0')}`, org_id: x.org_id, assessment_id: x.assessment_id, criterion_name: t.name, category: t.category, weight: t.weight, score: null }),
+    )
+  })
+  return get('assessment', a.assessment_id, s)
+}
+
+export async function scoreCriteria(assessmentId: string, scores: Record<string, number | null>, s: Session) {
+  requireAA(s)
+  const a = await get('assessment', assessmentId, s)
+  requireActable(REGISTRY.assessment, s, a, scopeFacts(readDb()))
+  if (a.status === 'Completed') throw new ApiError('CONFLICT', 'This assessment is completed; start a new audit to re-grade.')
+  const bad = Object.values(scores).some((v) => v != null && (v < 0 || v > 10))
+  if (bad) throw new ApiError('VALIDATION', 'Scores must be between 0 and 10.')
+  writeDb((d) => {
+    const changed: Rec = {}
+    for (const c of d.assessment_criteria) {
+      if (c.assessment_id === assessmentId && c.criterion_id in scores && c.score !== scores[c.criterion_id]) {
+        changed[c.criterion_name] = scores[c.criterion_id]
+        c.score = scores[c.criterion_id]
+      }
+    }
+    if (Object.keys(changed).length) d.audit_log.push(audit(s.actor, a.org_id, 'AssessmentCriterion', assessmentId, `${Object.keys(changed).length} criteria scored`, 'Update', null, changed))
+  })
+}
+
+/** Completing stores score + grade band and sets the building grade with a timestamp (E5-S03). */
+export async function completeAssessment(assessmentId: string, s: Session) {
+  requireAA(s)
+  const a = await get('assessment', assessmentId, s)
+  requireActable(REGISTRY.assessment, s, a, scopeFacts(readDb()))
+  const crit = readDb().assessment_criteria.filter((c) => c.assessment_id === assessmentId)
+  const missing = crit.filter((c) => c.score == null).length
+  if (missing) throw new ApiError('VALIDATION', `${missing} of ${crit.length} items are not scored yet.`)
+  const score = assessmentScore(crit)
+  const grade = gradeBand(score)
+  writeDb((d) => {
+    const x = d.assessments.find((y) => y.assessment_id === assessmentId)!
+    Object.assign(x, { status: 'Completed', total_score: score, grade })
+    const b = d.buildings.find((y) => y.building_id === x.building_id)!
+    const before = { grade: b.grade, grade_source: b.grade_source }
+    Object.assign(b, { grade, grade_source: 'AA scorecard', grade_assessed_at: now() })
+    d.audit_log.push(audit(s.actor, x.org_id, 'BuildingAssessment', assessmentId, `Assessment — ${b.name}`, 'Update', { status: 'Draft' }, { status: 'Completed', total_score: score, grade }))
+    d.audit_log.push(audit(s.actor, x.org_id, 'Building', b.building_id, b.name, 'Update', before, { grade, grade_source: 'AA scorecard' }))
+  })
+  return { score, grade }
+}
+
+// ---------------------------------------------------------------- BD pipeline with CRM ownership lock (v6)
+
+const norm = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ')
+
+export interface LockedAccount {
+  opp_id: string
+  account_name: string
+  owner: string
+  team: string
+  last_activity: string
+  stage: string
+  my_request: AccessRequest['status'] | null
+}
+
+/** Accounts owned by other BD people: only name, owner and last activity are shown (details stay locked). */
+export async function lockedAccounts(s: Session): Promise<LockedAccount[]> {
+  requireGrant(REGISTRY.opportunity, s, 'R')
+  const db = readDb()
+  const names = new Map(db.users.map((u) => [u.user_id, u.name]))
+  return db.opportunities
+    .filter((o) => o.owner_user_id && o.owner_user_id !== s.user.user_id && !o.co_owners.includes(s.user.user_id) && !isReleased(o as unknown as Rec))
+    .map((o) => ({
+      opp_id: o.opp_id,
+      account_name: o.account_name,
+      owner: names.get(o.owner_user_id!) ?? 'Another BD owner',
+      team: o.team,
+      last_activity: o.last_activity,
+      stage: o.stage,
+      my_request: db.access_requests.filter((r) => r.opp_id === o.opp_id && r.requester_id === s.user.user_id).at(-1)?.status ?? null,
+    }))
+}
+
+/** Ownership check on save (v6 "Save & Check Ownership"). */
+export async function checkAccount(name: string, s: Session): Promise<{ status: 'free' | 'mine' | 'locked' | 'released'; opp: Opportunity | null; owner: string | null }> {
+  requireGrant(REGISTRY.opportunity, s, 'R')
+  const db = readDb()
+  const o = db.opportunities.find((x) => norm(x.account_name) === norm(name) && x.stage !== 'Lost')
+  if (!o) return { status: 'free', opp: null, owner: null }
+  const owner = db.users.find((u) => u.user_id === o.owner_user_id)?.name ?? null
+  if (!o.owner_user_id || isReleased(o as unknown as Rec)) return { status: 'released', opp: o, owner }
+  if (o.owner_user_id === s.user.user_id || o.co_owners.includes(s.user.user_id)) return { status: 'mine', opp: o, owner }
+  return { status: 'locked', opp: { ...o, notes: null, potential_lakh: null, probability: null }, owner }
+}
+
+export async function createOpportunity(input: Rec, s: Session) {
+  const check = await checkAccount(String(input.account_name ?? ''), s)
+  if (check.status === 'locked') throw new ApiError('CONFLICT', `LOCKED:${check.opp!.opp_id}`)
+  if (check.status === 'mine') throw new ApiError('CONFLICT', `${input.account_name} is already in your pipeline.`)
+  if (check.status === 'released') throw new ApiError('CONFLICT', `RELEASED:${check.opp!.opp_id}`)
+  return create('opportunity', input, s)
+}
+
+export async function claimOpportunity(oppId: string, s: Session) {
+  requireWritable(s)
+  requireGrant(REGISTRY.opportunity, s, 'U')
+  const o = readDb().opportunities.find((x) => x.opp_id === oppId)
+  if (!o) throw new ApiError('NOT_FOUND', 'Opportunity not found.')
+  if (o.owner_user_id && !isReleased(o as unknown as Rec)) throw new ApiError('CONFLICT', 'This account is still owned — request access instead.')
+  writeDb((d) => {
+    const x = d.opportunities.find((y) => y.opp_id === oppId)!
+    const before = { owner_user_id: x.owner_user_id }
+    Object.assign(x, { owner_user_id: s.user.user_id, co_owners: [], last_activity: now() })
+    d.audit_log.push(audit(s.actor, null, 'Opportunity', oppId, x.account_name, 'Update', before, { owner_user_id: s.user.user_id }))
+  })
+}
+
+export async function requestAccess(oppId: string, s: Session) {
+  requireWritable(s)
+  requireGrant(REGISTRY.opportunity, s, 'R')
+  const db = readDb()
+  const o = db.opportunities.find((x) => x.opp_id === oppId)
+  if (!o) throw new ApiError('NOT_FOUND', 'Opportunity not found.')
+  if (db.access_requests.some((r) => r.opp_id === oppId && r.requester_id === s.user.user_id && r.status === 'Pending'))
+    throw new ApiError('CONFLICT', 'You already have a pending request for this account.')
+  const req: AccessRequest = { request_id: `ACR-${crypto.randomUUID().slice(0, 6).toUpperCase()}`, opp_id: oppId, requester_id: s.user.user_id, status: 'Pending', created_at: now(), escalate_at: new Date(Date.now() + 48 * 3_600_000).toISOString() }
+  writeDb((d) => {
+    d.access_requests.push(req)
+    d.audit_log.push(audit(s.actor, null, 'AccessRequest', req.request_id, `Access to ${o.account_name}`, 'Create', null, req as unknown as Rec))
+  })
+  return req
+}
+
+/** Requests waiting on me (accounts I own) and requests I have made. */
+export async function accessRequests(s: Session) {
+  requireGrant(REGISTRY.opportunity, s, 'R')
+  const db = readDb()
+  const names = new Map(db.users.map((u) => [u.user_id, u.name]))
+  const mine = new Set(db.opportunities.filter((o) => o.owner_user_id === s.user.user_id).map((o) => o.opp_id))
+  const enrich = (r: AccessRequest) => ({ ...r, account: db.opportunities.find((o) => o.opp_id === r.opp_id)?.account_name ?? '', requester: names.get(r.requester_id) ?? r.requester_id, overdue: r.status === 'Pending' && r.escalate_at < now() })
+  return {
+    incoming: db.access_requests.filter((r) => mine.has(r.opp_id) || s.role === 'Super Admin').map(enrich),
+    outgoing: db.access_requests.filter((r) => r.requester_id === s.user.user_id).map(enrich),
+  }
+}
+
+/** Owner answers within 48 h: hand over, add as co-owner, or decline. */
+export async function decideAccess(requestId: string, decision: 'Approved' | 'Co-owned' | 'Declined', s: Session) {
+  requireWritable(s)
+  const db = readDb()
+  const r = db.access_requests.find((x) => x.request_id === requestId)
+  if (!r) throw new ApiError('NOT_FOUND', 'Request not found.')
+  const o = db.opportunities.find((x) => x.opp_id === r.opp_id)!
+  if (s.role !== 'Super Admin' && o.owner_user_id !== s.user.user_id) throw new ApiError('FORBIDDEN', 'Only the account owner can answer this request.')
+  if (r.status !== 'Pending') throw new ApiError('CONFLICT', `Already ${r.status.toLowerCase()}.`)
+  writeDb((d) => {
+    const req = d.access_requests.find((x) => x.request_id === requestId)!
+    const opp = d.opportunities.find((x) => x.opp_id === r.opp_id)!
+    req.status = decision
+    const before = { owner_user_id: opp.owner_user_id, co_owners: opp.co_owners }
+    if (decision === 'Approved') Object.assign(opp, { owner_user_id: r.requester_id, co_owners: opp.owner_user_id ? [opp.owner_user_id] : [] })
+    if (decision === 'Co-owned') opp.co_owners = [...new Set([...opp.co_owners, r.requester_id])]
+    d.audit_log.push(audit(s.actor, null, 'Opportunity', opp.opp_id, opp.account_name, 'Update', before, { decision, owner_user_id: opp.owner_user_id, co_owners: opp.co_owners }))
+  })
+}
+
+export async function logActivity(oppId: string, s: Session) {
+  return update('opportunity', oppId, { notes: readDb().opportunities.find((o) => o.opp_id === oppId)?.notes ?? null }, s)
+}
+
+// ---------------------------------------------------------------- parking (E6)
+
+/** Current rate per slot type (latest effective on or before today) and any scheduled change. */
+function ratesFor(rates: ParkingRate[], buildingId: string) {
+  const today = todayIso()
+  const types: SlotType[] = ['Covered', 'Open', 'EV', 'Visitor']
+  return types.map((t) => {
+    const rs = rates.filter((r) => r.building_id === buildingId && r.slot_type === t).sort((a, b) => a.effective_from.localeCompare(b.effective_from))
+    const current = rs.filter((r) => r.effective_from <= today).at(-1) ?? null
+    const next = rs.find((r) => r.effective_from > today) ?? null
+    return { slot_type: t, current, next }
+  })
+}
+
+export async function parkingSummary(buildingId: string, s: Session) {
+  const bays = (await list('bay', s, { building_id: buildingId })) as Bay[]
+  const rates = (await list('parkingRate', s, { building_id: buildingId })) as ParkingRate[]
+  const ctx = scopedCtx(s, readDb())
+  const leases = ctx.leases.filter((l) => l.building_id === buildingId && l.status === 'Active')
+  const occ = new Map(ctx.occupiers.map((o) => [o.occupier_id, o.name]))
+  const byRate = ratesFor(rates, buildingId)
+  const rateOf = (b: Bay) => b.rate ?? byRate.find((r) => r.slot_type === b.type)?.current?.rate ?? 0
+  const allocated = bays.filter((b) => b.status === 'Allocated')
+  const monthly = allocated.reduce((sum, b) => sum + rateOf(b), 0)
+  const esc = (byRate.find((r) => r.slot_type === 'Covered')?.current?.escalation_pct ?? 0) / 100
+  const visible = rates.some((r) => 'rate' in r)
+  return {
+    bays,
+    inventory: bays.filter((b) => b.type !== 'Visitor').length,
+    counts: { Available: bays.filter((b) => b.status === 'Available').length, Allocated: allocated.length, Reserved: bays.filter((b) => b.status === 'Reserved').length },
+    rates: byRate,
+    leases: leases.map((l) => ({ lease_id: l.lease_id, occupier: occ.get(l.occupier_id) ?? 'Occupier', entitled: l.parking_slots ?? 0, allocated: bays.filter((b) => b.lease_id === l.lease_id).length })),
+    revenue: visible ? { monthly, year1: monthly * 12, threeYear: Math.round(monthly * 12 * (1 + (1 + esc) + (1 + esc) ** 2)) } : null,
+  }
+}
+
+/** E6-S05: allocate specific bays to a lease — no double allocation, never beyond the lease's entitlement. */
+export async function allocateBays(leaseId: string, bayIds: string[], s: Session) {
+  const l = (await get('lease', leaseId, s)) as Lease
+  const db = readDb()
+  const already = db.bays.filter((b) => b.lease_id === leaseId).length
+  if (already + bayIds.length > (l.parking_slots ?? 0))
+    throw new ApiError('VALIDATION', `This lease is entitled to ${l.parking_slots ?? 0} slots; ${already} are allocated. Raise the lease's parking slots first.`)
+  for (const id of bayIds) {
+    const b = db.bays.find((x) => x.bay_id === id)
+    if (!b || b.building_id !== l.building_id) throw new ApiError('VALIDATION', 'Bays must be in the lease’s building.')
+    if (b.status !== 'Available') throw new ApiError('CONFLICT', `Bay ${b.bay_label} is ${b.status.toLowerCase()} — it cannot be allocated twice.`)
+  }
+  for (const id of bayIds) await update('bay', id, { status: 'Allocated', lease_id: leaseId }, s)
+}
+
+export async function releaseBay(bayId: string, s: Session) {
+  return update('bay', bayId, { status: 'Available', lease_id: null }, s)
+}
+
+// ---------------------------------------------------------------- revenue at risk (E7-S02/S03)
+
+export interface RiskRow {
+  key: string
+  lease_id: string
+  occupier: string
+  building_id: string
+  building: string
+  cause: 'Expiry' | 'Break'
+  date: string
+  quarter: string
+  annual_rent: number
+  area: number
+}
+
+/** Annualised rent from leases expiring or with a break option inside the window. */
+export async function revenueAtRisk(months: number, s: Session): Promise<RiskRow[]> {
+  const leases = (await list('lease', s)) as Lease[]
+  const ctx = scopedCtx(s, readDb())
+  const end = addMonths(todayIso(), months)
+  const today = todayIso()
+  const occ = new Map(ctx.occupiers.map((o) => [o.occupier_id, o.name]))
+  const out: RiskRow[] = []
+  for (const l of leases.filter((x) => x.status === 'Active' && x.rent != null)) {
+    const base = { lease_id: l.lease_id, occupier: occ.get(l.occupier_id) ?? 'Occupier', building_id: l.building_id, building: ctx.buildings.find((b) => b.building_id === l.building_id)?.name ?? '', annual_rent: l.rent! * l.area * 12, area: l.area }
+    if (l.expiry >= today && l.expiry <= end) out.push({ ...base, key: `${l.lease_id}-e`, cause: 'Expiry', date: l.expiry, quarter: quarterOf(l.expiry) })
+    if (l.break_date && l.break_date >= today && l.break_date <= end) out.push({ ...base, key: `${l.lease_id}-b`, cause: 'Break', date: l.break_date, quarter: quarterOf(l.break_date) })
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Audit an export produced by a custom view (e.g. revenue at risk). */
+export async function auditExport(entity: string, label: string, s: Session) {
+  if (s.readOnly) return
+  writeDb((d) => {
+    d.audit_log.push(audit(s.actor, s.role === 'Super Admin' ? null : s.org.org_id, entity, '*', label, 'Export', null, null))
+  })
+}
+
+export const daysUntil = (iso: string) => daysBetween(todayIso(), iso)

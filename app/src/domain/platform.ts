@@ -1,8 +1,10 @@
 // Platform & access entities — field names follow the Alpha PRD §5 data dictionary verbatim.
 import type {
   Building, BuildingAmenity, BuildingDocument, BuildingFloor, BuildingImage, Campus, CampusAmenity, Certification,
-  DocumentShare, FloorUnit, Mandate, Owner, OwnerContact, OwnershipHistory,
+  DocumentShare, FloorUnit, Owner, OwnerContact, OwnershipHistory,
 } from './assets'
+import type { AccessRequest, AssessmentCriterion, BuildingAssessment, Mandate, Opportunity, TargetOccupier, Vendor } from './mandates'
+import type { Bay, ParkingRate } from './parking'
 import type { LeaseDoc, Lease, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from './leasing'
 
 export type OrgType = 'PropTattva' | 'Owner' | 'Occupier' | 'Enabler'
@@ -127,4 +129,14 @@ export interface PlatformDb {
   rent_invoices: RentInvoice[]
   broker_log: OccupierBrokerLog[]
   relationship_log: RelationshipLog[]
+  // mandate & GTM (E5) + v6 BD pipeline
+  vendors: Vendor[]
+  target_occupiers: TargetOccupier[]
+  assessments: BuildingAssessment[]
+  assessment_criteria: AssessmentCriterion[]
+  opportunities: Opportunity[]
+  access_requests: AccessRequest[]
+  // parking (E6)
+  bays: Bay[]
+  parking_rates: ParkingRate[]
 }

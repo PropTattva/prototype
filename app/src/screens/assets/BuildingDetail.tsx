@@ -18,6 +18,7 @@ import Card from '../../components/ui/Card'
 import KpiCard from '../../components/ui/KpiCard'
 import { useToast } from '../../components/ui/Toast'
 import FloorGrid from './FloorGrid'
+import ParkingPanel from '../../components/ParkingPanel'
 import GradeCalculator from './GradeCalculator'
 
 interface Tab {
@@ -36,8 +37,11 @@ const TABS: Tab[] = [
   { key: 'images', label: 'Images', entity: 'image' },
   { key: 'certifications', label: 'Certifications', entity: 'certification' },
   { key: 'amenities', label: 'Amenities', entity: 'buildingAmenity' },
+  { key: 'parking', label: 'Parking', entity: 'bay' },
   { key: 'title', label: 'Title chain', entity: 'ownershipHistory' },
   { key: 'ownership', label: 'Ownership', entity: 'ownerContact' },
+  { key: 'mandate', label: 'Mandate', entity: 'mandate' },
+  { key: 'assessment', label: 'Assessments', entity: 'assessment' },
 ]
 
 /** One building: every E1 child record on a tab, each tab a scoped CRUD list. */
@@ -85,6 +89,15 @@ export default function BuildingDetail({ id, rest }: { id: string; rest: string[
       break
     case 'ownership':
       body = <Ownership session={session} b={building} base={base} more={more} />
+      break
+    case 'parking':
+      body = <ParkingPanel session={session} buildingId={id} base={base} rest={more} />
+      break
+    case 'mandate':
+      body = embedded('mandate', { rowHref: (r) => href(`mandates/${r.mandate_id}`), emptyText: 'No mandate on this building.' })
+      break
+    case 'assessment':
+      body = embedded('assessment', { rowHref: (r) => href(`assessments/${r.assessment_id}`), onNew: () => navigate('assessments/new'), newLabel: 'Start site audit', emptyText: 'No AA assessment yet.' })
       break
     default:
       body = embedded(tab.entity!)
@@ -192,7 +205,14 @@ function Overview({ session, b, ctx }: { session: Session; b: Building; ctx: Opt
         <Card title="Grade" action={<button className="text-xs font-semibold text-royal hover:underline" onClick={() => setCalc(true)}>Grade calculator</button>}>
           <div className="flex items-center gap-3">
             <span className="text-3xl font-extrabold text-royal">{b.grade ?? '—'}</span>
-            <span className="text-xs text-ink-soft">{b.grade ? 'Building-level grade used for benchmarking and occupier matching (E1-S03).' : 'Not graded yet — try the calculator.'}</span>
+            <span className="text-xs text-ink-soft">
+              {b.grade ? (
+                <>
+                  {b.grade_source === 'AA scorecard' ? <b className="text-ok">Confirmed by AA scorecard</b> : b.grade_source === 'Indicative (calculator)' ? <b className="text-warn">Indicative — awaiting AA scorecard</b> : 'Imported grade'}
+                  {b.grade_assessed_at && ` · ${new Date(b.grade_assessed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                </>
+              ) : 'Not graded yet — try the calculator.'}
+            </span>
           </div>
           {!!certs?.length && (
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -211,12 +231,12 @@ function Overview({ session, b, ctx }: { session: Session; b: Building; ctx: Opt
       {calc && (
         <GradeCalculator
           current={b.grade}
-          canApply={api.permissions('building', session).update}
+          canApply={api.permissions('building', session).update && (b.grade_source !== 'AA scorecard' || session.role === 'Super Admin' || session.role === 'AA')}
           onClose={() => setCalc(false)}
           onApply={async (g) => {
             try {
-              await api.update('building', b.building_id, { grade: g }, session)
-              toast('ok', `Grade set to ${g}.`)
+              await api.applyIndicativeGrade(b.building_id, g, session)
+              toast('ok', `Indicative grade ${g} applied — an AA scorecard will confirm it.`)
               setCalc(false)
             } catch (e) {
               toast('error', (e as Error).message)

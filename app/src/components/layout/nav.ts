@@ -28,6 +28,13 @@ const I = {
   sharing: { path: 'sharing', label: 'Sharing & Access', icon: '⇆', feature: 'documents' },
   owners: { path: 'owners', label: 'Owners & contacts', icon: '◎' },
   comparables: { path: 'comparables', label: 'Rent comparables', icon: '≈' },
+  risk: { path: 'revenue-at-risk', label: 'Revenue at risk', icon: '⚠', feature: 'revenue_at_risk' },
+  parking: { path: 'parking', label: 'Parking', icon: 'P', feature: 'parking' },
+  mandates: { path: 'mandates', label: 'Mandates', icon: '✦' },
+  assessments: { path: 'assessments', label: 'Assessments', icon: '✓' },
+  targets: { path: 'targets', label: 'Target occupiers', icon: '◎' },
+  pipeline: { path: 'pipeline', label: 'BD pipeline', icon: '◆' },
+  vendors: { path: 'vendors', label: 'Vendors', icon: '⚙' },
   team: { path: 'team', label: 'Team & seats', icon: '◍' },
   subscription: { path: 'subscription', label: 'Subscription', icon: '★' },
 }
@@ -47,21 +54,23 @@ export function navFor(s: Session): NavSection[] {
           { path: 'admin/audit', label: 'Audit log', icon: '◉' },
           { path: 'admin/view-as', label: 'View as', icon: '⇆' },
         ] },
-        { title: 'Assets', items: [{ ...I.dash, label: 'Portfolio' }, I.campuses, I.buildings, I.stacking, I.availability, I.owners] },
+        { title: 'Assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking, I.owners] },
         { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
+        { title: 'Mandates & BD', items: [I.mandates, I.assessments, I.targets, I.pipeline, I.vendors] },
         { title: 'Vault', items: [I.vault, I.reminders, I.sharing] },
       ]
     case 'AA':
       return [
-        { title: 'Mandated assets', items: [{ ...I.dash, label: 'Portfolio' }, I.campuses, I.buildings, I.stacking, I.availability] },
+        { title: 'Mandates & BD', items: [I.pipeline, I.mandates, I.assessments, I.targets, I.vendors] },
+        { title: 'Mandated assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
         { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
         { title: 'Vault', items: [I.vault, I.reminders] },
         { title: 'Security', items: [{ path: 'audit', label: 'Audit log', icon: '◉' }] },
       ]
     case 'Owner/Developer':
       return [
-        { title: 'Portfolio', items: [I.dash, I.campuses, I.buildings, I.stacking, I.availability] },
-        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers] },
+        { title: 'Portfolio', items: [I.dash, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
+        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.mandates] },
         { title: 'Vault', items: [I.vault, I.reminders, I.sharing, I.owners] },
         { title: 'Market', items: [I.comparables] },
         { title: 'Account', items: [I.team, I.subscription] },

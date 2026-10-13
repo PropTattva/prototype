@@ -110,12 +110,21 @@ const lease: EntityDef = {
   searchKeys: ['lease_id'],
   newId: () => shortId('LSE'),
   defaults: () => ({ status: 'Active', source_tag: 'Owner-Declared', escalation_pct: 5, escalation_freq: 'Annual', deposit_months: 6, deposit_form: 'Cash', deposit_received: false, rent_free_months: 0 }),
-  validate: (d) => {
+  validate: (d, db) => {
     const e: Record<string, string> = {}
     if (d.start && d.expiry && d.expiry <= d.start) e.expiry = 'Expiry must be after the start date.'
     if (d.break_date && ((d.start && d.break_date <= d.start) || (d.expiry && d.break_date >= d.expiry))) e.break_date = 'Break date must fall between start and expiry.'
     if (d.area != null && d.area <= 0) e.area = 'Area must be more than zero.'
     if (d.deposit_received && !d.received_date) e.received_date = 'When was the deposit received? (E2-S10)'
+    // E6-S06: parking entitlements across leases cannot exceed the building's bay inventory.
+    const inventory = db.bays.filter((b) => b.building_id === d.building_id && b.type !== 'Visitor').length
+    if (inventory && d.parking_slots) {
+      const others = db.leases.filter((l) => l.building_id === d.building_id && l.status === 'Active' && l.lease_id !== d.lease_id).reduce((s, l) => s + (l.parking_slots ?? 0), 0)
+      if (others + d.parking_slots > inventory)
+        e.parking_slots = `Only ${Math.max(0, inventory - others)} of ${inventory} bays are unallocated in this building.`
+    }
+    const allocated = db.bays.filter((b) => b.lease_id === d.lease_id).length
+    if (d.parking_slots != null && allocated > d.parking_slots) e.parking_slots = `${allocated} bays are already allocated to this lease; release some first.`
     return e
   },
   derive: (d, db, mode, orig) => {
@@ -130,6 +139,8 @@ const lease: EntityDef = {
   afterWrite: (r, db, mode, orig) => {
     if (mode === 'edit' && orig?.status === r.status) return
     syncFloorOccupancy(db, db.lease_spaces.filter((s) => s.lease_id === r.lease_id).map((s) => s.floor_id))
+    // An ended lease gives its parking bays back to the pool.
+    if (r.status !== 'Active') for (const b of db.bays) if (b.lease_id === r.lease_id) Object.assign(b, { lease_id: null, status: 'Available' })
   },
   related: [
     { entity: 'leaseSpace', foreignKey: 'lease_id', title: 'Spaces' },

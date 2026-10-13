@@ -2,6 +2,7 @@
 // People, emails, prices and dates are SAMPLE values (labelled as such in the UI).
 import type { AuditEntry, Invite, Organisation, PlatformDb, Subscription, SubscriptionPlan, User } from '../domain/platform'
 import { createAssetSeed } from './seedAssets'
+import { createMandateSeed } from './seedMandates'
 
 const DAY = 86_400_000
 const iso = (offsetDays: number, base = Date.now()) => new Date(base + offsetDays * DAY).toISOString()
@@ -94,6 +95,9 @@ function seedAudit(): AuditEntry[] {
 }
 
 export function createSeed(): PlatformDb {
+  const assets = createAssetSeed()
+  // Mandate/parking seed adjusts assets in place (grades from AA scorecards, lease parking slots).
+  const phase4 = createMandateSeed(assets)
   return {
     organisations: structuredClone(organisations),
     users: structuredClone(users),
@@ -101,6 +105,7 @@ export function createSeed(): PlatformDb {
     plans: structuredClone(plans),
     subscriptions: structuredClone(subscriptions),
     audit_log: seedAudit(),
-    ...createAssetSeed(),
+    ...assets,
+    ...phase4,
   }
 }

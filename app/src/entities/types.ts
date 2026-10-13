@@ -1,6 +1,7 @@
 import type { Capability, Visibility } from '../access/policy'
 import type { Building, BuildingDocument, BuildingFloor, Campus, FloorUnit, Owner } from '../domain/assets'
 import type { Lease, Occupier } from '../domain/leasing'
+import type { Mandate, Vendor } from '../domain/mandates'
 import type { Organisation, PlatformDb, SubscriptionPlan, User } from '../domain/platform'
 
 export type EntityKey =
@@ -11,6 +12,8 @@ export type EntityKey =
   | 'certification' | 'ownershipHistory' | 'ownerContact' | 'documentShare'
   // leasing (E2–E4)
   | 'occupier' | 'lease' | 'leaseSpace' | 'renewal' | 'leaseDoc' | 'rent' | 'brokerLog' | 'relationshipLog'
+  // mandate & GTM (E5), parking (E6)
+  | 'mandate' | 'vendor' | 'targetOccupier' | 'assessment' | 'assessmentCriterion' | 'opportunity' | 'bay' | 'parkingRate'
 
 export type FieldType =
   | 'text'
@@ -31,6 +34,7 @@ export type FieldType =
   | 'partners'
   | 'file'
   | 'image'
+  | 'json'
 
 export type Rec = Record<string, any>
 
@@ -47,6 +51,10 @@ export interface OptionCtx {
   leases: Lease[]
   users: User[]
   documents: BuildingDocument[]
+  mandates: Mandate[]
+  vendors: Vendor[]
+  /** Internal roles only: every building's id and name, for picking a building to mandate */
+  directory: Pick<Building, 'building_id' | 'name' | 'org_id' | 'campus_id'>[]
 }
 
 export interface Option {
@@ -87,7 +95,7 @@ export interface RelatedDef {
 }
 
 /** How a record reaches its building, for mandated / published row scope. */
-export type ScopeVia = 'self-building' | 'building' | 'lease' | 'self-campus' | 'campus' | 'floor'
+export type ScopeVia = 'self-building' | 'building' | 'lease' | 'self-campus' | 'campus' | 'floor' | 'assessment'
 
 export interface EntityDef {
   key: EntityKey

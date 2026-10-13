@@ -6,7 +6,7 @@ import type { Dataset } from '../domain/legacy'
 import { DOC_TYPES } from '../domain/assets'
 import type {
   Building, BuildingAmenity, BuildingDocument, BuildingFloor, Campus, CampusAmenity, Certification, DevelopmentStatus,
-  DocumentShare, FloorUnit, HandoverCondition, Mandate, Owner, OwnerContact, OwnershipHistory,
+  DocumentShare, FloorUnit, HandoverCondition, Owner, OwnerContact, OwnershipHistory,
 } from '../domain/assets'
 import type { Lease, LeaseDoc, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from '../domain/leasing'
 import type { PlatformDb } from '../domain/platform'
@@ -51,7 +51,7 @@ function timelineToDate(t: string, today: string): string | null {
 
 const handoverOf = (h: string): HandoverCondition | null => (h === 'Warm Shell' || h === 'Furnished' || h === 'BTS' ? h : null)
 
-export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 'invites' | 'plans' | 'subscriptions' | 'audit_log'> {
+export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 'invites' | 'plans' | 'subscriptions' | 'audit_log' | 'mandates' | 'vendors' | 'target_occupiers' | 'assessments' | 'assessment_criteria' | 'opportunities' | 'access_requests' | 'bays' | 'parking_rates'> {
   const today = todayIso()
   const parks = demo.parks
 
@@ -118,6 +118,8 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
       handover_condition: whole ? handoverOf(whole.handover) : null,
       expected_completion: whole ? timelineToDate(whole.timeline, today) : null,
       mandate_threshold_pct: b.blockId === 'D-D2' ? 80 : null,
+      grade_source: preOc ? null : 'Imported',
+      grade_assessed_at: null,
     }
   })
 
@@ -420,14 +422,9 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
     { share_id: 'SHR-003', org_id: 'OWN-2', building_id: null, scope: 'Building folder', doc_id: null, category: null, email: 'diligence@fund.example', access: 'View only', expires_at: addDays(today, -4), status: 'Active' },
   ]
 
-  // AA mandates (full Mandate module arrives in Phase 4): AA's row scope is buildings under an active mandate.
-  const mandates: Mandate[] = buildings
-    .filter((b) => b.campus_id === 'CMP-E' || b.campus_id === 'CMP-F' || b.building_id === 'BLD-D-D6')
-    .map((b, i) => ({ mandate_id: `MND-${String(i + 1).padStart(3, '0')}`, org_id: b.org_id, building_id: b.building_id, status: 'Active', exec_mode: b.org_id === 'OWN-1' ? 'Hybrid' : 'AA team', start: addDays(today, -150), expiry: addDays(today, 215) }))
-
   return {
     campuses, owners, buildings, floors, units, building_amenities, campus_amenities, images: [], documents, certifications,
-    ownership_history, owner_contacts, document_shares, mandates,
+    ownership_history, owner_contacts, document_shares,
     occupiers, leases, lease_spaces: spaces, renewals, lease_docs, rent_invoices, broker_log, relationship_log,
   }
 }

@@ -133,7 +133,9 @@ const building: EntityDef = {
     { key: 'micro_market', label: 'Micro-market', type: 'text', required: true, column: true, placeholder: 'e.g. ORR, Whitefield' },
     { key: 'lat', label: 'Latitude', type: 'decimal' },
     { key: 'long', label: 'Longitude', type: 'decimal' },
-    { key: 'grade', label: 'Grade', type: 'enum', options: ['A+', 'A', 'B', 'C'], column: true, help: 'Set from the latest assessment (Phase 4) or the self-serve calculator.' },
+    { key: 'grade', label: 'Grade', type: 'enum', options: ['A+', 'A', 'B', 'C'], system: true, column: true },
+    { key: 'grade_source', label: 'Grade source', type: 'enum', options: ['Indicative (calculator)', 'AA scorecard', 'Imported'], system: true, help: 'The calculator grade stays indicative until an AA scorecard overrides it (E1-S04).' },
+    { key: 'grade_assessed_at', label: 'Graded on', type: 'datetime', system: true },
     { key: 'total_area', label: 'Total chargeable area', type: 'decimal', unit: 'sq ft', column: true },
     { key: 'ownership_type', label: 'Ownership', type: 'enum', options: ['Sole', 'Multi-owner', 'Strata'], required: true, column: true },
     { key: 'multi_owner_struct', label: 'JV / consortium / SPV partners', type: 'partners', visibility: 'owner', showIf: (d) => d.ownership_type === 'Multi-owner' },
@@ -153,6 +155,9 @@ const building: EntityDef = {
     status: 'Active',
     published: false,
     multi_owner_struct: [],
+    grade: null,
+    grade_source: null,
+    grade_assessed_at: null,
   }),
   validate: (d) => {
     const e: Record<string, string> = {}

@@ -73,6 +73,7 @@ export default function StackingPlan({ plans, onCell, multi }: Props) {
                     cell.area ? `${cell.area.toLocaleString('en-IN')} sq ft` : null,
                     cell.rent != null ? `₹${cell.rent}/sq ft/mo` : null,
                     cell.expiry ? `Expires ${fmtDate(cell.expiry)}` : null,
+                    cell.parking ? `Parking: ${cell.parking} bays allocated` : null,
                     cell.vacancy_days != null ? `Vacant ${cell.vacancy_days} days` : null,
                     cell.masked ? 'Tenant masked for your role' : null,
                   ].filter(Boolean).join('\n')

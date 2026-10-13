@@ -21,6 +21,7 @@ const TABS: { key: string; label: string; entity: EntityKey }[] = [
   { key: 'abstract', label: 'Deed & abstract', entity: 'leaseDoc' },
   { key: 'invoices', label: 'Invoices', entity: 'rent' },
   { key: 'relationship', label: 'Relationship log', entity: 'relationshipLog' },
+  { key: 'parking', label: 'Parking', entity: 'bay' },
 ]
 
 const GROUPS = [
@@ -107,7 +108,13 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
           </a>
         ))}
       </nav>
-      {tab && <EntityPage key={tab.key} entity={tab.entity} basePath={`leases/${id}/${tab.key}`} rest={editing ? [] : more} linkTo={linkFor(session)} embedded where={{ lease_id: id }} />}
+      {tab?.key === 'parking' && (
+        <p className="mb-3 text-xs text-ink-soft">
+          Entitled to <b>{lease.parking_slots ?? 0}</b> slots. Allocate specific bays from the{' '}
+          <a href={href(`buildings/${lease.building_id}/parking`)} className="font-semibold text-royal hover:underline">building’s bay map</a> (E6-S05).
+        </p>
+      )}
+      {tab && <EntityPage key={tab.key} entity={tab.entity} basePath={`leases/${id}/${tab.key}`} rest={editing ? [] : more} linkTo={linkFor(session)} embedded where={{ lease_id: id }} hideColumns={tab.key === 'parking' ? ['building_id'] : []} />}
       {editing && (
         <RecordDrawer entity="lease" id={id} mode="edit" session={session} ctx={ctx} linkTo={linkFor(session)} defaultOrgId={null} onClose={() => navigate(`leases/${id}`)} onMode={() => navigate(`leases/${id}`)} />
       )}

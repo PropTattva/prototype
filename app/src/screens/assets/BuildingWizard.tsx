@@ -15,7 +15,7 @@ import { useToast } from '../../components/ui/Toast'
 const STEPS = [
   { title: 'Identity', sub: 'Name, address, PIN code and micro-market (E1-S01)', fields: ['name', 'owner_id', 'campus_id', 'address', 'pincode', 'city', 'micro_market', 'lat', 'long'] },
   { title: 'Ownership', sub: 'Sole, multi-owner (JV/SPV) or strata (E1-S12, S18)', fields: ['ownership_type', 'multi_owner_struct', 'mandate_threshold_pct'] },
-  { title: 'Status', sub: 'Operational or pre-OC, grade, size and publishing', fields: ['status', 'handover_condition', 'expected_completion', 'grade', 'total_area', 'published'] },
+  { title: 'Status', sub: 'Operational or pre-OC, size and publishing (grade comes from the calculator or AA scorecard)', fields: ['status', 'handover_condition', 'expected_completion', 'total_area', 'published'] },
 ]
 
 /** Three-step building registration. Validation runs on the server (api) at the end; errors jump back to their step. */

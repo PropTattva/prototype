@@ -73,6 +73,9 @@ export interface Building {
   expected_completion: string | null
   /** ext, E1-S14: % of strata area that must sign for a valid mandate */
   mandate_threshold_pct: number | null
+  /** ext: the calculator grade is indicative until an AA scorecard overrides it (E1-S04) */
+  grade_source: 'Indicative (calculator)' | 'AA scorecard' | 'Imported' | null
+  grade_assessed_at: string | null
 }
 
 export type OccupancyType = 'Self-occupied' | 'Leased' | 'Vacant' | 'Partially leased'
@@ -211,15 +214,4 @@ export interface DocumentShare {
   access: 'View only' | 'Comment' | 'Upload / Edit'
   expires_at: string | null
   status: 'Active' | 'Revoked'
-}
-
-/** Minimal mandate (full entity in Phase 4): drives AA row scope "*under active mandate". */
-export interface Mandate {
-  mandate_id: string
-  org_id: string
-  building_id: string
-  status: 'Active' | 'Expired' | 'Terminated'
-  exec_mode: 'Internal (owner team)' | 'AA team' | 'External agency' | 'Hybrid'
-  start: string
-  expiry: string
 }

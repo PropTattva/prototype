@@ -97,7 +97,7 @@ export default function EntityTable({ entity, rows, ctx, session, onOpen, hideCo
                 setPage(0)
               }}
             >
-              <option value="">All {f.label.toLowerCase()}s</option>
+              <option value="">Any {f.label.toLowerCase()}</option>
               {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           )

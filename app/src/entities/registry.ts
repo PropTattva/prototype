@@ -5,6 +5,7 @@ import type { PlatformDb } from '../domain/platform'
 import { ASSET_ENTITIES } from './assets'
 import { isLive, orgName, orgOptions, orgTypeOf, plural, shortId } from './helpers'
 import { LEASING_ENTITIES } from './leasing'
+import { MANDATE_ENTITIES } from './mandates'
 import type { EntityDef, EntityKey, Option, OptionCtx, Rec } from './types'
 
 const organisation: EntityDef = {
@@ -251,7 +252,7 @@ const subscription: EntityDef = {
   },
 }
 
-export const REGISTRY = { organisation, user, invite, plan, subscription, ...ASSET_ENTITIES, ...LEASING_ENTITIES } as Record<EntityKey, EntityDef>
+export const REGISTRY = { organisation, user, invite, plan, subscription, ...ASSET_ENTITIES, ...LEASING_ENTITIES, ...MANDATE_ENTITIES } as Record<EntityKey, EntityDef>
 
 export const entityDef = (key: EntityKey) => REGISTRY[key]
 

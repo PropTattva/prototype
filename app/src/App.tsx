@@ -25,6 +25,13 @@ import LeaseWizard from './screens/leasing/LeaseWizard'
 import Ledger from './screens/leasing/Ledger'
 import Renewals from './screens/leasing/Renewals'
 import Login from './screens/Login'
+import AssessmentDetail from './screens/mandates/AssessmentDetail'
+import Assessments from './screens/mandates/Assessments'
+import MandateDetail from './screens/mandates/MandateDetail'
+import Mandates from './screens/mandates/Mandates'
+import Pipeline from './screens/mandates/Pipeline'
+import Parking from './screens/Parking'
+import RevenueAtRisk from './screens/RevenueAtRisk'
 import Subscription from './screens/Subscription'
 import Team from './screens/Team'
 import Reminders from './screens/vault/Reminders'
@@ -59,6 +66,8 @@ function SimplePage({ session, section, rest }: { session: Session; section: str
     campuses: { entity: 'campus', subtitle: 'Multi-building estates and tech parks, with shared amenities and the campus management company (E1-S16, S21).' },
     occupiers: { entity: 'occupier', subtitle: 'Tenants and prospects, tagged by sector, GCC status and ultimate parent (E3-S07–S09). Shared across the platform.' },
     owners: { entity: 'owner', subtitle: 'The owning party and its sub-type, with contacts, committee members and strata owners (E1-S08–S15).' },
+    vendors: { entity: 'vendor', subtitle: 'Agencies and vendors engaged on mandates and campuses (E5-S02, E1-S16).' },
+    targets: { entity: 'targetOccupier', subtitle: 'Pre-identified outreach targets per mandated building — AA-only, never shared externally (E5-S08).' },
   }
   const c = cfg[section]
   return <EntityPage key={section} entity={c.entity} basePath={section} rest={rest} subtitle={c.subtitle} linkTo={linkFor(session)} ownOrgOnly={owner && c.entity !== 'occupier'} />
@@ -130,9 +139,26 @@ function Screen({ session }: { session: Session }) {
       case 'sharing':
         page = <Sharing rest={rest} />
         break
+      case 'mandates':
+        page = rest[0] && rest[0] !== 'new' ? <MandateDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} /> : <Mandates rest={rest} />
+        break
+      case 'assessments':
+        page = rest[0] && rest[0] !== 'new' ? <AssessmentDetail key={rest[0]} id={rest[0]} /> : <Assessments rest={rest} />
+        break
+      case 'pipeline':
+        page = <Pipeline rest={rest} />
+        break
+      case 'parking':
+        page = <Parking rest={rest} />
+        break
+      case 'revenue-at-risk':
+        page = <RevenueAtRisk />
+        break
       case 'campuses':
       case 'occupiers':
       case 'owners':
+      case 'vendors':
+      case 'targets':
         page = <SimplePage session={session} section={section} rest={rest} />
         break
     }
