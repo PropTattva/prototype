@@ -2,16 +2,10 @@
 // Forms, tables, detail views, validation and access checks are all driven from here.
 import { FEATURES, QUOTA_KEYS, ROLES_FOR_ORG_TYPE } from '../access/policy'
 import type { PlatformDb } from '../domain/platform'
-import { getParksForOrg } from '../data/legacy'
+import { ASSET_ENTITIES } from './assets'
+import { isLive, orgName, orgOptions, orgTypeOf, plural, shortId } from './helpers'
+import { LEASING_ENTITIES } from './leasing'
 import type { EntityDef, EntityKey, Option, OptionCtx, Rec } from './types'
-
-const shortId = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
-const orgName = (ctx: OptionCtx, id: string | null) => ctx.organisations.find((o) => o.org_id === id)?.name ?? id ?? '—'
-const orgOptions = (ctx: OptionCtx): Option[] => ctx.organisations.map((o) => ({ value: o.org_id, label: o.name, group: o.type }))
-const orgTypeOf = (ctx: OptionCtx, id: string | null) => ctx.organisations.find((o) => o.org_id === id)?.type
-
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
-const isLive = (s: { status: string }) => s.status === 'Active' || s.status === 'Trial'
 
 const organisation: EntityDef = {
   key: 'organisation',
@@ -61,11 +55,13 @@ const organisation: EntityDef = {
     const users = db.users.filter((u) => u.org_id === r.org_id).length
     const subs = db.subscriptions.filter((s) => s.org_id === r.org_id).length
     const invites = db.invites.filter((i) => i.org_id === r.org_id && i.status === 'Pending').length
-    const parks = getParksForOrg(r.org_id).length
+    const buildings = db.buildings.filter((b) => b.org_id === r.org_id).length
+    const campuses = db.campuses.filter((c) => c.org_id === r.org_id).length
     if (users) out.push(plural(users, 'user'))
     if (subs) out.push(plural(subs, 'subscription'))
     if (invites) out.push(plural(invites, 'pending invite'))
-    if (parks) out.push(plural(parks, 'park'))
+    if (campuses) out.push(plural(campuses, 'campus', 'campuses'))
+    if (buildings) out.push(plural(buildings, 'building'))
     return out
   },
   deleteHint: 'Set the status to Suspended instead to block access but keep the records.',
@@ -255,7 +251,7 @@ const subscription: EntityDef = {
   },
 }
 
-export const REGISTRY: Record<EntityKey, EntityDef> = { organisation, user, invite, plan, subscription }
+export const REGISTRY = { organisation, user, invite, plan, subscription, ...ASSET_ENTITIES, ...LEASING_ENTITIES } as Record<EntityKey, EntityDef>
 
 export const entityDef = (key: EntityKey) => REGISTRY[key]
 

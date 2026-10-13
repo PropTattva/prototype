@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { can } from '../../access/policy'
 import type { Session } from '../../access/session'
 import * as api from '../../data/api'
 import { ApiError } from '../../data/api'
@@ -14,6 +13,8 @@ import { FieldInput, FieldValue } from './fields'
 
 export type DrawerMode = 'view' | 'edit' | 'create'
 
+export type LinkTo = (entity: EntityKey, id: string) => string | null
+
 interface Props {
   entity: EntityKey
   id: string | null
@@ -23,27 +24,62 @@ interface Props {
   onClose: () => void
   onMode: (mode: DrawerMode, id?: string) => void
   /** Where related records link to, or null if the viewer has no page for them */
-  linkTo: (entity: EntityKey, id: string) => string | null
+  linkTo: LinkTo
   /** Org to pre-fill on create (customers are always forced to their own org by the api) */
   defaultOrgId: string | null
+  /** Values fixed by the context (e.g. building_id on a building tab): prefilled and not shown in the form */
+  presets?: Rec
   hideFields?: string[]
+  /** Extra content under the fields in view mode */
+  extra?: (rec: Rec) => ReactNode
+}
+
+/** Shared handler: plan / quota problems open an upgrade dialog, validation highlights fields, the rest toast. */
+export function useErrorHandler(session: Session) {
+  const toast = useToast()
+  const [dialog, setDialog] = useState<ReactNode>(null)
+  const handle = (e: unknown, setErrors?: (e: Record<string, string>) => void) => {
+    if (e instanceof ApiError && (e.code === 'QUOTA' || e.code === 'PLAN')) {
+      setDialog(
+        <Modal
+          tone="crit"
+          title={e.code === 'PLAN' ? 'Not in your plan' : 'Upgrade needed'}
+          onClose={() => setDialog(null)}
+          actions={
+            <>
+              <button className="btn" onClick={() => setDialog(null)}>Close</button>
+              {session.role !== 'Super Admin' && <a className="btn btn-gold" href={href('subscription')}>View plans</a>}
+            </>
+          }
+        >
+          {e.message}
+        </Modal>,
+      )
+    } else if (e instanceof ApiError && e.code === 'VALIDATION' && setErrors) {
+      setErrors(e.fieldErrors)
+      toast('error', e.message)
+    } else {
+      toast('error', (e as Error).message)
+    }
+  }
+  return { dialog, setDialog, handle }
 }
 
 export default function RecordDrawer(props: Props) {
-  const { entity, id, mode, session, ctx, onClose, onMode, linkTo, defaultOrgId, hideFields = [] } = props
+  const { entity, id, mode, session, ctx, onClose, onMode, linkTo, defaultOrgId, presets = {}, hideFields = [], extra } = props
   const def = entityDef(entity)
   const toast = useToast()
-  const writable = !session.readOnly
+  const perms = api.permissions(entity, session)
   const record = useApi(() => (id ? api.get(entity, id, session) : Promise.resolve(null)), [entity, id, session.user.user_id])
+  const { dialog, setDialog, handle } = useErrorHandler(session)
 
   const [draft, setDraft] = useState<Rec>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
-  const [dialog, setDialog] = useState<ReactNode>(null)
 
   useEffect(() => {
     setErrors({})
-    if (mode === 'create') setDraft(def.defaults?.({ ...ctx, orgId: defaultOrgId }) ?? {})
+    if (mode === 'create') setDraft({ ...(def.defaults?.({ ...ctx, orgId: defaultOrgId }) ?? {}), ...presets })
     else if (record.data) setDraft(structuredClone(record.data))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, record.data, entity])
@@ -58,34 +94,8 @@ export default function RecordDrawer(props: Props) {
   }
   if (!rec) return null
 
-  const fields = def.fields.filter((f) => !hideFields.includes(f.key) && (!f.showIf || f.showIf(mode === 'view' ? rec : draft)))
-
-  const showError = (e: unknown) => {
-    if (e instanceof ApiError && e.code === 'QUOTA') {
-      setDialog(
-        <Modal
-          tone="crit"
-          title="Upgrade needed"
-          onClose={() => setDialog(null)}
-          actions={
-            <>
-              <button className="btn" onClick={() => setDialog(null)}>Close</button>
-              {session.role !== 'Super Admin' && (
-                <a className="btn btn-gold" href={href('subscription')}>View plans</a>
-              )}
-            </>
-          }
-        >
-          {e.message}
-        </Modal>,
-      )
-    } else if (e instanceof ApiError && e.code === 'VALIDATION') {
-      setErrors(e.fieldErrors)
-      toast('error', e.message)
-    } else {
-      toast('error', (e as Error).message)
-    }
-  }
+  const hidden = new Set([...hideFields, ...Object.keys(presets)])
+  const fields = def.fields.filter((f) => !hidden.has(f.key) && (!f.showIf || f.showIf(mode === 'view' ? rec : draft)))
 
   const save = async () => {
     setSaving(true)
@@ -101,7 +111,7 @@ export default function RecordDrawer(props: Props) {
         onMode('view', id!)
       }
     } catch (e) {
-      showError(e)
+      handle(e, setErrors)
     } finally {
       setSaving(false)
     }
@@ -136,7 +146,7 @@ export default function RecordDrawer(props: Props) {
                   onClose()
                 } catch (e) {
                   setDialog(null)
-                  showError(e)
+                  handle(e)
                 }
               }}
             >
@@ -155,24 +165,37 @@ export default function RecordDrawer(props: Props) {
       await fn()
       toast('ok', okText)
     } catch (e) {
-      showError(e)
+      handle(e)
     }
   }
 
-  const inviteActions = entity === 'invite' && mode === 'view' && writable && can('org_users', session.role, 'U') && (
+  const inviteActions = entity === 'invite' && mode === 'view' && perms.update && (
     <>
       {rec.status === 'Pending' && (
         <>
           <button className="btn" onClick={run(() => api.revokeInvite(id!, session), 'Invite revoked.')}>Revoke</button>
-          <button className="btn" onClick={() => setDialog(<AcceptDialog email={rec.email} onClose={() => setDialog(null)} onAccept={async (name) => {
-            try {
-              await api.acceptInvite(id!, session, name)
-              toast('ok', `${name} joined — seat consumed.`)
-              setDialog(null)
-            } catch (e) {
-              showError(e)
+          <button
+            className="btn"
+            onClick={() =>
+              setDialog(
+                <AcceptDialog
+                  email={rec.email}
+                  onClose={() => setDialog(null)}
+                  onAccept={async (name) => {
+                    try {
+                      await api.acceptInvite(id!, session, name)
+                      toast('ok', `${name} joined — seat consumed.`)
+                      setDialog(null)
+                    } catch (e) {
+                      handle(e)
+                    }
+                  }}
+                />,
+              )
             }
-          }} />)}>Simulate accept</button>
+          >
+            Simulate accept
+          </button>
         </>
       )}
       {(rec.status === 'Pending' || rec.status === 'Expired' || rec.status === 'Revoked') && (
@@ -183,15 +206,12 @@ export default function RecordDrawer(props: Props) {
 
   const footer =
     mode === 'view' ? (
-      writable && (
-        <>
-          {inviteActions}
-          {can(def.capability, session.role, 'D') && <button className="btn mr-auto text-crit hover:border-crit hover:text-crit" onClick={askDelete}>Delete</button>}
-          {can(def.capability, session.role, 'U') && entity !== 'invite' && (
-            <button className="btn btn-primary" onClick={() => onMode('edit', id!)}>Edit</button>
-          )}
-        </>
-      )
+      <>
+        {inviteActions}
+        {perms.remove && <button className="btn mr-auto text-crit hover:border-crit hover:text-crit" onClick={askDelete}>Delete</button>}
+        {perms.update && entity !== 'invite' && <button className="btn btn-primary" onClick={() => onMode('edit', id!)}>Edit</button>}
+        {def.immutable && <span className="mr-auto text-[11px] text-ink-muted">Immutable record — cannot be edited or deleted.</span>}
+      </>
     ) : (
       <>
         <button className="btn" onClick={() => (mode === 'create' ? onClose() : onMode('view', id!))}>Cancel</button>
@@ -210,24 +230,24 @@ export default function RecordDrawer(props: Props) {
         sub={mode === 'create' ? null : def.subtitle?.(rec, ctx)}
         footer={footer}
       >
-        {session.readOnly && mode === 'view' && (
-          <p className="mb-4 rounded-md bg-gold-light px-3 py-2 text-xs text-royal-dark">Read-only: you are using View as.</p>
-        )}
+        {session.readOnly && mode === 'view' && <p className="mb-4 rounded-md bg-gold-light px-3 py-2 text-xs text-royal-dark">Read-only: you are using View as.</p>}
         {mode === 'view' ? (
           <>
+            {rec.data_url && <img src={rec.data_url} alt={rec.caption ?? ''} className="mb-4 max-h-64 w-full rounded-md border border-line object-cover" />}
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-              {fields.map((f) => (
-                <div key={f.key} className={f.type === 'multienum' || f.type === 'quotas' ? 'sm:col-span-2' : ''}>
-                  <dt className="label">{f.label}</dt>
-                  <dd className="text-sm text-ink">
-                    <FieldValue f={f} rec={rec} ctx={ctx} />
-                  </dd>
-                </div>
-              ))}
+              {fields
+                .filter((f) => !f.hideInDetail)
+                .map((f) => (
+                  <div key={f.key} className={['multienum', 'quotas', 'partners', 'textarea'].includes(f.type) ? 'sm:col-span-2' : ''}>
+                    <dt className="label">{f.label}</dt>
+                    <dd className="whitespace-pre-line text-sm text-ink">
+                      <FieldValue f={f} rec={rec} ctx={ctx} />
+                    </dd>
+                  </div>
+                ))}
             </dl>
-            {def.related?.map((r) => (
-              <Related key={r.entity + r.foreignKey} {...r} value={rec[def.idKey]} session={session} ctx={ctx} linkTo={linkTo} />
-            ))}
+            {extra?.(rec)}
+            {def.related?.map((r) => <Related key={r.entity + r.foreignKey} {...r} value={rec[def.idKey]} session={session} ctx={ctx} linkTo={linkTo} />)}
           </>
         ) : (
           <form
@@ -266,13 +286,14 @@ function Related({ entity, foreignKey, title, value, session, ctx, linkTo }: {
   value: string
   session: Session
   ctx: OptionCtx
-  linkTo: Props['linkTo']
+  linkTo: LinkTo
 }) {
   const def = entityDef(entity)
-  const { data } = useApi(() => (can(def.capability, session.role, 'R') ? api.list(entity, session) : Promise.resolve([])), [entity, session.user.user_id])
-  const rows = (data ?? []).filter((r) => r[foreignKey] === value)
-  if (!can(def.capability, session.role, 'R')) return null
-  const statusField = def.fields.find((f) => f.key === 'status')
+  const perms = api.permissions(entity, session)
+  const { data } = useApi(() => (perms.read ? api.list(entity, session, { [foreignKey]: value }) : Promise.resolve([])), [entity, value, session.user.user_id])
+  if (!perms.read) return null
+  const rows = data ?? []
+  const statusField = def.fields.find((f) => f.key === 'status' || f.key === 'stage')
   return (
     <section className="mt-6">
       <h4 className="mb-2 flex items-center justify-between border-b border-line pb-1.5 text-xs font-extrabold uppercase tracking-wider text-royal">
@@ -281,7 +302,7 @@ function Related({ entity, foreignKey, title, value, session, ctx, linkTo }: {
       </h4>
       {rows.length ? (
         <ul className="divide-y divide-line-light">
-          {rows.map((r) => {
+          {rows.slice(0, 50).map((r) => {
             const to = linkTo(entity, r[def.idKey])
             const body = (
               <>

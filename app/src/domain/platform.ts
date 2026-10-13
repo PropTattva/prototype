@@ -1,4 +1,9 @@
 // Platform & access entities — field names follow the Alpha PRD §5 data dictionary verbatim.
+import type {
+  Building, BuildingAmenity, BuildingDocument, BuildingFloor, BuildingImage, Campus, CampusAmenity, Certification,
+  DocumentShare, FloorUnit, Mandate, Owner, OwnerContact, OwnershipHistory,
+} from './assets'
+import type { LeaseDoc, Lease, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from './leasing'
 
 export type OrgType = 'PropTattva' | 'Owner' | 'Occupier' | 'Enabler'
 export type EnablerType =
@@ -90,6 +95,7 @@ export interface AuditEntry {
   timestamp: string
 }
 
+/** The whole in-browser database. */
 export interface PlatformDb {
   organisations: Organisation[]
   users: User[]
@@ -97,4 +103,28 @@ export interface PlatformDb {
   plans: SubscriptionPlan[]
   subscriptions: Subscription[]
   audit_log: AuditEntry[]
+  // assets (E1)
+  campuses: Campus[]
+  owners: Owner[]
+  buildings: Building[]
+  floors: BuildingFloor[]
+  units: FloorUnit[]
+  building_amenities: BuildingAmenity[]
+  campus_amenities: CampusAmenity[]
+  images: BuildingImage[]
+  documents: BuildingDocument[]
+  certifications: Certification[]
+  ownership_history: OwnershipHistory[]
+  owner_contacts: OwnerContact[]
+  document_shares: DocumentShare[]
+  mandates: Mandate[]
+  // leasing (E2–E4)
+  occupiers: Occupier[]
+  leases: Lease[]
+  lease_spaces: LeaseSpace[]
+  renewals: LeaseRenewal[]
+  lease_docs: LeaseDoc[]
+  rent_invoices: RentInvoice[]
+  broker_log: OccupierBrokerLog[]
+  relationship_log: RelationshipLog[]
 }

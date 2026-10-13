@@ -13,18 +13,27 @@ export const ROLES_FOR_ORG_TYPE: Record<OrgType, Role[]> = {
 }
 
 export type Action = 'C' | 'R' | 'U' | 'D'
-export type RowScope = 'all' | 'own-org' | 'own-scope'
+/**
+ * all        — every record
+ * own-org    — records whose org field is the viewer's org
+ * own-scope  — audit only: actions by PropTattva staff
+ * mandated   — AA: records on buildings under an active mandate (§7.2 "*")
+ * published  — occupiers / brokers: records on published buildings, public entities only
+ * own-broker — broker log rows registered by the viewer's firm
+ */
+export type RowScope = 'all' | 'own-org' | 'own-scope' | 'mandated' | 'published' | 'own-broker'
 export interface Grant {
   actions: Action[]
   scope: RowScope
 }
 
 /** §7.2 capability rows used by Phase 1 entities. Absent role = no access ("–"). */
-export type Capability = 'organisations' | 'org_users' | 'plans' | 'subscriptions' | 'audit'
+export type Capability = 'organisations' | 'org_users' | 'plans' | 'subscriptions' | 'audit' | 'buildings' | 'leases' | 'invoices' | 'broker_log' | 'occupiers'
 
 const CRUD: Action[] = ['C', 'R', 'U', 'D']
 const CRU: Action[] = ['C', 'R', 'U']
 const R: Action[] = ['R']
+const CR: Action[] = ['C', 'R']
 
 export const CAPABILITIES: Record<Capability, Partial<Record<Role, Grant>>> = {
   // Not a §7.2 row: every org can read its own record; only Super Admin manages orgs.
@@ -61,6 +70,41 @@ export const CAPABILITIES: Record<Capability, Partial<Record<Role, Grant>>> = {
     'Super Admin': { actions: R, scope: 'all' },
     AA: { actions: R, scope: 'own-scope' },
   },
+  // §7.2 "Buildings, floors, bays" + "Stacking & availability" (asset registry entities)
+  buildings: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRUD, scope: 'mandated' },
+    'Owner/Developer': { actions: CRUD, scope: 'own-org' },
+    Occupier: { actions: R, scope: 'published' },
+    Enabler: { actions: R, scope: 'published' },
+  },
+  // §7.2 "Leases & renewals" (+ pricing & financial fields on leases)
+  leases: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRUD, scope: 'mandated' },
+    'Owner/Developer': { actions: CRUD, scope: 'own-org' },
+  },
+  // §7.2 "Invoices & ledger"
+  invoices: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: R, scope: 'mandated' },
+    'Owner/Developer': { actions: CRUD, scope: 'own-org' },
+  },
+  // §7.2 "Broker introduction log" — immutable, so no U/D for anyone.
+  broker_log: {
+    'Super Admin': { actions: R, scope: 'all' },
+    AA: { actions: CR, scope: 'all' },
+    'Owner/Developer': { actions: R, scope: 'own-org' },
+    Enabler: { actions: CR, scope: 'own-broker' },
+  },
+  // Occupier reference catalogue (sector, GCC, parent — E3-S07..09), shared across tenants.
+  occupiers: {
+    'Super Admin': { actions: CRUD, scope: 'all' },
+    AA: { actions: CRU, scope: 'all' },
+    'Owner/Developer': { actions: CRU, scope: 'all' },
+    // Brokers register introductions for their clients, so they can look up and add occupiers.
+    Enabler: { actions: CR, scope: 'all' },
+  },
 }
 
 export function grantFor(cap: Capability, role: Role): Grant | null {
@@ -81,15 +125,16 @@ export const VISIBILITY_LABEL: Record<Visibility, string> = {
   anon: 'Public (anonymised)',
 }
 
-/** Can this viewer see a field with the given rule on a record owned by recordOrgId? */
-export function canSeeField(rule: Visibility, viewer: { role: Role; org_id: string }, recordOrgId: string | null) {
+/** Can this viewer see a field with the given rule on a record owned by recordOrgId? (§7.1) */
+export function canSeeField(rule: Visibility, viewer: { role: Role; org_id: string }, recordOrgId: string | null, mandated = false) {
   if (viewer.role === 'Super Admin') return true
   switch (rule) {
     case 'public':
     case 'anon':
       return true
     case 'owner':
-      return recordOrgId != null && viewer.org_id === recordOrgId
+      // "The owning Owner org + Super Admin; AA if under mandate"
+      return (recordOrgId != null && viewer.org_id === recordOrgId) || (viewer.role === 'AA' && mandated)
     case 'aa':
       return viewer.role === 'AA'
   }

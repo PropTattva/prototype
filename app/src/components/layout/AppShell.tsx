@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { listSignInDirectory, resetDemoData } from '../../data/api'
+import { hasFeature, listSignInDirectory, resetDemoData } from '../../data/api'
 import { useApi } from '../../data/useApi'
 import { href, useRoute } from '../../state/router'
 import { useAuthed, useSession } from '../../state/SessionContext'
 import PtMark from '../ui/PtMark'
+import { LockIcon } from '../crud/fields'
 import { useToast } from '../ui/Toast'
 import { navFor } from './nav'
 
@@ -46,7 +47,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <div className="grid md:grid-cols-[220px_1fr]">
-        <aside className="border-b border-line bg-white md:min-h-[calc(100vh-56px)] md:border-b-0 md:border-r md:px-3 md:py-5">
+        <aside className="min-w-0 border-b border-line bg-white md:min-h-[calc(100vh-56px)] md:border-b-0 md:border-r md:px-3 md:py-5">
           <nav className="flex gap-1 overflow-x-auto px-3 py-2 md:block md:px-0 md:py-0">
             {sections.map((s) => (
               <div key={s.title} className="contents md:block">
@@ -61,6 +62,11 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   >
                     <span className={`inline-flex w-4 justify-center text-sm ${active(i.path) ? 'text-gold' : ''}`}>{i.icon}</span>
                     {i.label}
+                    {i.feature && !hasFeature(session, i.feature) && (
+                      <span className="ml-auto text-ink-muted" title="Not in your plan">
+                        <LockIcon />
+                      </span>
+                    )}
                   </a>
                 ))}
               </div>

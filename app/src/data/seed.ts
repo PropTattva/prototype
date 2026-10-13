@@ -1,6 +1,7 @@
 // Initial platform data. Owner org ids (OWN-1..3) match the parks in mockData.json.
 // People, emails, prices and dates are SAMPLE values (labelled as such in the UI).
 import type { AuditEntry, Invite, Organisation, PlatformDb, Subscription, SubscriptionPlan, User } from '../domain/platform'
+import { createAssetSeed } from './seedAssets'
 
 const DAY = 86_400_000
 const iso = (offsetDays: number, base = Date.now()) => new Date(base + offsetDays * DAY).toISOString()
@@ -100,5 +101,6 @@ export function createSeed(): PlatformDb {
     plans: structuredClone(plans),
     subscriptions: structuredClone(subscriptions),
     audit_log: seedAudit(),
+    ...createAssetSeed(),
   }
 }

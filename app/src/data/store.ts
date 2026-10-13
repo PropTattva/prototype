@@ -6,7 +6,7 @@ import { createSeed } from './seed'
 
 const KEY = 'pt-demo-db'
 // Bump when the stored shape changes so old browsers re-seed instead of crashing.
-const VERSION = 1
+const VERSION = 2
 
 let db: PlatformDb = load()
 const listeners = new Set<() => void>()

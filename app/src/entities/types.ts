@@ -1,7 +1,16 @@
 import type { Capability, Visibility } from '../access/policy'
-import type { Organisation, PlatformDb, SubscriptionPlan } from '../domain/platform'
+import type { Building, BuildingDocument, BuildingFloor, Campus, FloorUnit, Owner } from '../domain/assets'
+import type { Lease, Occupier } from '../domain/leasing'
+import type { Organisation, PlatformDb, SubscriptionPlan, User } from '../domain/platform'
 
-export type EntityKey = 'organisation' | 'user' | 'invite' | 'plan' | 'subscription'
+export type EntityKey =
+  // platform
+  | 'organisation' | 'user' | 'invite' | 'plan' | 'subscription'
+  // assets (E1)
+  | 'campus' | 'owner' | 'building' | 'floor' | 'unit' | 'buildingAmenity' | 'campusAmenity' | 'image' | 'document'
+  | 'certification' | 'ownershipHistory' | 'ownerContact' | 'documentShare'
+  // leasing (E2–E4)
+  | 'occupier' | 'lease' | 'leaseSpace' | 'renewal' | 'leaseDoc' | 'rent' | 'brokerLog' | 'relationshipLog'
 
 export type FieldType =
   | 'text'
@@ -11,18 +20,33 @@ export type FieldType =
   | 'enum'
   | 'multienum'
   | 'int'
+  | 'decimal'
+  | 'percent'
   | 'money'
   | 'date'
   | 'datetime'
+  | 'bool'
   | 'ref'
   | 'quotas'
+  | 'partners'
+  | 'file'
+  | 'image'
 
 export type Rec = Record<string, any>
 
-/** Lookups available when computing dynamic options — the same shape on the client form and in the api. */
+/** Lookups available when computing dynamic options and labels — already scoped to what the viewer may see. */
 export interface OptionCtx {
   organisations: Organisation[]
   plans: SubscriptionPlan[]
+  campuses: Campus[]
+  owners: Owner[]
+  buildings: Building[]
+  floors: BuildingFloor[]
+  units: FloorUnit[]
+  occupiers: Occupier[]
+  leases: Lease[]
+  users: User[]
+  documents: BuildingDocument[]
 }
 
 export interface Option {
@@ -48,8 +72,12 @@ export interface FieldDef {
   showIf?: (draft: Rec) => boolean
   help?: string
   placeholder?: string
-  /** Where the field appears: table column / form / detail. Defaults: form + detail. */
+  /** Shown as a table column */
   column?: boolean
+  /** Display unit, e.g. "sq ft" or "₹/sq ft/mo" */
+  unit?: string
+  /** Hide from the detail view (e.g. image data) */
+  hideInDetail?: boolean
 }
 
 export interface RelatedDef {
@@ -57,6 +85,9 @@ export interface RelatedDef {
   foreignKey: string
   title: string
 }
+
+/** How a record reaches its building, for mandated / published row scope. */
+export type ScopeVia = 'self-building' | 'building' | 'lease' | 'self-campus' | 'campus' | 'floor'
 
 export interface EntityDef {
   key: EntityKey
@@ -68,6 +99,15 @@ export interface EntityDef {
   capability: Capability
   /** Field holding the owning org (row-level scope); null = global record */
   orgKey: string | null
+  scopeVia?: ScopeVia
+  /** Readable by occupiers / brokers on published buildings (§7.1 "Public once published") */
+  publicReadable?: boolean
+  /** Extra row filter for the published scope (e.g. document sharing_scope) */
+  publicRowFilter?: (rec: Rec) => boolean
+  /** Plan feature an Owner org needs for this entity (EP-B-S03) */
+  feature?: string
+  /** No updates or deletes after creation (e.g. broker log) */
+  immutable?: boolean
   title: (rec: Rec, ctx: OptionCtx) => string
   subtitle?: (rec: Rec, ctx: OptionCtx) => string
   fields: FieldDef[]
@@ -78,8 +118,14 @@ export interface EntityDef {
   defaults?: (ctx: OptionCtx & { orgId: string | null }) => Rec
   related?: RelatedDef[]
   /** Server-side business rules; return field → message */
-  validate?: (draft: Rec, db: PlatformDb, mode: 'create' | 'edit', original: Rec | null) => Record<string, string>
+  validate?: (draft: Rec, db: PlatformDb, mode: 'create' | 'edit', original: Rec | null) => Partial<Record<string, string>>
+  /** Server-side derived values applied before save */
+  derive?: (draft: Rec, db: PlatformDb, mode: 'create' | 'edit', original: Rec | null) => void
+  /** Side effects on other records, applied in the same write (e.g. lease → floor occupancy) */
+  afterWrite?: (rec: Rec, db: PlatformDb, mode: 'create' | 'edit' | 'delete', original: Rec | null) => void
   /** Records that block deletion, as human-readable reasons */
   blockers?: (rec: Rec, db: PlatformDb) => string[]
   deleteHint?: string
 }
+
+export type { Building, Lease, User }

@@ -50,7 +50,9 @@ First task: confirm the structure, generate `mockData` from the demo dataset, sc
 - `app/src/access/policy.ts` encodes PRD §7: the role × action matrix, per-field visibility rules, features and quotas.
 - `app/src/entities/registry.ts` defines each PRD entity once: fields, enums, validation, visibility, delete blockers, related lists. The shared components in `components/crud/` (EntityPage, EntityTable, RecordDrawer, fields) render any registered entity. To add an entity: add its type in `domain/`, its collection in the store, and its definition in the registry.
 - Routing is hash-based (`state/router.ts`). The session (signed-in user, optional View-as actor) is in `state/SessionContext.tsx`.
-- The legacy park demo data still comes from `docs/PropTattva_Demo_Data.json` → `app/scripts/build_mock_data.py` → `app/src/data/mockData.json`, read through `data/legacy.ts`. It is replaced by the PRD asset entities in Phase 2.
+- Seed data: `docs/PropTattva_Demo_Data.json` → `app/scripts/build_mock_data.py` → `app/src/data/mockData.json` → `data/seedAssets.ts`, which builds the PRD asset & leasing entities. Parks become Campuses, blocks become Buildings, and floors and leases are grouped per occupier. Values the dataset lacks come from a seeded generator, so a reset is deterministic. `data/seed.ts` holds the platform orgs, users and plans.
+- Entity definitions are split into `entities/registry.ts` (platform), `entities/assets.ts` (E1) and `entities/leasing.ts` (E2–E4). Row scope per role comes from `policy.ts` (`all`, `own-org`, `mandated` for AA, `published` for occupiers/brokers, `own-broker`). `scopeVia` tells the api how a record reaches its building.
+- Custom screens (everything else is a generic EntityPage): building detail with tabs, the building and lease wizards, the floor grid, the stacking plan, availability, renewals board, rent ledger, comparables, and the v6 vault / reminders / sharing pages.
 
 ## Decisions (Oct 2026)
 - **Persistence:** demo edits are saved to browser localStorage, with a "Reset demo data" button. This overrides the "no localStorage" rule above. It is still frontend-only: no backend and no fetch.
