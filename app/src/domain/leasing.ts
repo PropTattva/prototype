@@ -2,6 +2,8 @@
 
 export type SourceTag = 'Manual' | 'PT-Verified' | 'Propstack' | 'Owner-Declared'
 
+export type OccupierTier = 'Tier 1' | 'Tier 2' | 'Tier 3'
+
 export interface Occupier {
   occupier_id: string
   name: string
@@ -10,6 +12,8 @@ export interface Occupier {
   is_startup: boolean
   parent_company: string | null
   parent_country: string | null
+  /** ext: occupier quality tier — Tier 1 large MNC / GCC, Tier 2 established mid-size, Tier 3 small / startup */
+  tier: OccupierTier | null
 }
 
 export interface Lease {

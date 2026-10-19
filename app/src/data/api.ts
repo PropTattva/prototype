@@ -12,6 +12,8 @@ import { REGISTRY, seatUsage } from '../entities/registry'
 import type { EntityDef, EntityKey, OptionCtx, Rec } from '../entities/types'
 import { ASSESSMENT_TEMPLATE, assessmentScore, gradeBand } from '../lib/assessment'
 import { addDays, addMonths, daysBetween, daysFromToday, quarterOf, todayIso } from '../lib/dates'
+import { needsAction as actionRules, type ActionItem } from '../lib/actions'
+import { marketNews, portfolioNews, type NewsItem } from '../lib/news'
 import { priceModel } from '../lib/pricing'
 import { suggestSwot } from '../lib/swot'
 import { readDb, resetDb, writeDb } from './store'
@@ -397,6 +399,26 @@ const auditable = (rec: Rec) => {
 
 // ---------------------------------------------------------------- generic CRUD
 
+/** Needs-action panel: lease follow-ups for the viewer's scope. Rent items only for roles that can read invoices. */
+export async function needsAction(s: Session): Promise<ActionItem[]> {
+  if (!can('leases', s.role, 'R')) return []
+  const db = readDb()
+  const ctx = scopedCtx(s, db)
+  const ids = new Set(ctx.leases.map((l) => l.lease_id))
+  const invoices = can('invoices', s.role, 'R') ? db.rent_invoices.filter((i) => ids.has(i.lease_id)) : []
+  return actionRules(ctx, db.renewals.filter((r) => ids.has(r.lease_id)), invoices, todayIso())
+}
+
+/** Dashboard news feed: lease events from the viewer's scope, newest first, plus sample market headlines. */
+export async function leaseNews(s: Session): Promise<NewsItem[]> {
+  const today = todayIso()
+  const newest = (a: NewsItem, b: NewsItem) => b.date.localeCompare(a.date)
+  const own = portfolioNews(scopedCtx(s, readDb()), today).sort(newest)
+  const market = marketNews(today).sort(newest)
+  // Alternate so the viewer's own portfolio never gets buried under market headlines.
+  return Array.from({ length: Math.max(own.length, market.length) }, (_, i) => [own[i], market[i]]).flat().filter((n): n is NewsItem => !!n)
+}
+
 export type ListWhere = Record<string, string | null | undefined>
 
 export async function list(key: EntityKey, s: Session, where: ListWhere = {}): Promise<Rec[]> {
@@ -702,6 +724,10 @@ export interface StackCell {
   vacancy_days: number | null
   /** E6-S05: bays allocated to the lease on this floor */
   parking: number | null
+  /** floor title: sold to an investor (strata) or retained by the developer */
+  sold: boolean
+  /** investor name, null when retained or masked for the viewer */
+  investor: string | null
 }
 
 /** E4-S03: floor-by-floor stacking plan, tenant masked for anyone who cannot read leases. */
@@ -745,6 +771,9 @@ export async function stackingPlan(buildingIds: string[], s: Session) {
             expiry: lease?.expiry ?? null,
             vacancy_days: f.vacant_since ? -daysFromToday(f.vacant_since) : null,
             parking: lease ? db.bays.filter((x) => x.lease_id === lease.lease_id).length : null,
+            sold: f.ownership === 'Sold to investor',
+            // Investor names follow the floor field's owner-only visibility.
+            investor: f.ownership === 'Sold to investor' && canSeeField('owner', { role: s.role, org_id: s.org.org_id }, f.org_id, s.role === 'AA') ? f.investor_name : null,
           }
         })
       return { building: b, cells }

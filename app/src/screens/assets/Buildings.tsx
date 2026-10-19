@@ -4,6 +4,7 @@ import { linkFor } from '../../lib/links'
 import { href, navigate } from '../../state/router'
 import { useAuthed } from '../../state/SessionContext'
 import EntityPage from '../../components/crud/EntityPage'
+import { ViewToggle } from '../../components/drill/Drill'
 
 /** Building registry (E1-S01). Owners see their own, AA their mandated buildings, occupiers/brokers published ones. */
 export default function Buildings({ rest }: { rest: string[] }) {
@@ -33,7 +34,9 @@ export default function Buildings({ rest }: { rest: string[] }) {
       newLabel="Register building"
       hideColumns={session.role === 'Occupier' || session.role === 'Enabler' ? ['published'] : []}
       banner={
-        quota && quota.limit != null ? (
+        <>
+        <div className="mb-3 flex justify-end"><ViewToggle module="buildings" v2={false} /></div>
+        {quota && quota.limit != null ? (
           <div className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-4 py-2.5 text-sm ${over ? 'border-crit/40' : 'border-line'}`}>
             <span>
               <strong className={over ? 'text-crit' : 'text-royal'}>{quota.used} of {quota.limit} buildings</strong>
@@ -45,7 +48,8 @@ export default function Buildings({ rest }: { rest: string[] }) {
               </a>
             )}
           </div>
-        ) : null
+        ) : null}
+        </>
       }
     />
   )

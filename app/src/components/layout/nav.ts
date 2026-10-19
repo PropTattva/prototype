@@ -20,6 +20,7 @@ const I = {
   availability: { path: 'availability', label: 'Availability', icon: '◌' },
   leases: { path: 'leases', label: 'Leases', icon: '≡', feature: 'basic_leasing' },
   renewals: { path: 'renewals', label: 'Renewals', icon: '↻', feature: 'lease_crm' },
+  rentroll: { path: 'rent-roll', label: 'Rent roll', icon: '▦', feature: 'basic_leasing' },
   ledger: { path: 'ledger', label: 'Rent ledger', icon: '₹', feature: 'invoicing' },
   occupiers: { path: 'occupiers', label: 'Occupiers', icon: '◍' },
   brokers: { path: 'broker-log', label: 'Broker log', icon: '⇄' },
@@ -55,7 +56,7 @@ export function navFor(s: Session): NavSection[] {
           { path: 'admin/view-as', label: 'View as', icon: '⇆' },
         ] },
         { title: 'Assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking, I.owners] },
-        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
+        { title: 'Leasing', items: [I.leases, I.rentroll, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
         { title: 'Mandates & BD', items: [I.mandates, I.assessments, I.targets, I.pipeline, I.vendors] },
         { title: 'Vault', items: [I.vault, I.reminders, I.sharing] },
       ]
@@ -63,14 +64,14 @@ export function navFor(s: Session): NavSection[] {
       return [
         { title: 'Mandates & BD', items: [I.pipeline, I.mandates, I.assessments, I.targets, I.vendors] },
         { title: 'Mandated assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
-        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
+        { title: 'Leasing', items: [I.leases, I.rentroll, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
         { title: 'Vault', items: [I.vault, I.reminders] },
         { title: 'Security', items: [{ path: 'audit', label: 'Audit log', icon: '◉' }] },
       ]
     case 'Owner/Developer':
       return [
         { title: 'Portfolio', items: [I.dash, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
-        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.mandates] },
+        { title: 'Leasing', items: [I.leases, I.rentroll, I.renewals, I.ledger, I.occupiers, I.brokers, I.mandates] },
         { title: 'Vault', items: [I.vault, I.reminders, I.sharing, I.owners] },
         { title: 'Market', items: [I.comparables] },
         { title: 'Account', items: [I.team, I.subscription] },

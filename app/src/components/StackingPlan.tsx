@@ -12,6 +12,9 @@ export const STACK_STYLE: Record<StackStatus, { cell: string; dot: string; label
   Parking: { cell: 'bg-hover text-ink-muted border-line', dot: 'bg-hover border-line', label: 'Parking / MLCP' },
 }
 
+/** Investor-sold floors: faint 45° hairlines over the whole tile (Part leased uses wide 135° bands, so they stay distinct). */
+export const SOLD_TEXTURE = 'repeating-linear-gradient(45deg, rgba(15,27,61,0.13) 0 1px, transparent 1px 6px)'
+
 const ORDER = ['UB', 'G', 'LB', 'B1', 'B2', 'B3']
 const floorRank = (f: string) => (/^\d+$/.test(f) ? 1000 - Number(f) : 1000 + (ORDER.indexOf(f) < 0 ? 99 : ORDER.indexOf(f)))
 
@@ -32,6 +35,9 @@ export default function StackingPlan({ plans, onCell, multi }: Props) {
   const all = plans.flatMap((p) => p.cells)
   const totals = (Object.keys(STACK_STYLE) as StackStatus[]).map((st) => ({ st, area: all.filter((c) => c.status === st).reduce((s, c) => s + (c.area ?? 0), 0), n: all.filter((c) => c.status === st).length }))
   const leasable = totals.filter((t) => t.st !== 'Parking').reduce((s, t) => s + t.area, 0)
+  const sold = all.filter((c) => c.sold)
+  const soldArea = sold.reduce((s, c) => s + (c.area ?? 0), 0)
+  const investors = [...new Set(sold.map((c) => c.investor).filter(Boolean))]
 
   if (!all.length) return <p className="rounded-lg border border-line bg-white px-4 py-10 text-center text-sm text-ink-muted">No floors recorded yet — add floors to build the stacking plan.</p>
 
@@ -45,6 +51,14 @@ export default function StackingPlan({ plans, onCell, multi }: Props) {
             {st !== 'Parking' && leasable > 0 && <span className="text-ink-muted">({Math.round((area / leasable) * 100)}%)</span>}
           </span>
         ))}
+        {sold.length > 0 && (
+          <span className="flex items-center gap-1.5 border-l border-line pl-4" title={investors.length ? `Investors: ${investors.join(', ')}` : undefined}>
+            <i className="h-3 w-3 rounded-sm border border-ink/30 bg-white" style={{ backgroundImage: SOLD_TEXTURE.replace('0.13', '0.4').replace('6px', '3.5px') }} />
+            <b className="text-ink">Sold to investors</b> {sold.length} fl · {fmtSft(soldArea)} sq ft
+            {leasable > 0 && <span className="text-ink-muted">({Math.round((soldArea / leasable) * 100)}%)</span>}
+            {investors.length > 0 && <span className="text-ink-muted">· {investors.length} {investors.length === 1 ? 'investor' : 'investors'}</span>}
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto rounded-lg border border-line bg-white">
         <table className="w-full border-separate border-spacing-1 text-[11px]">
@@ -76,16 +90,23 @@ export default function StackingPlan({ plans, onCell, multi }: Props) {
                     cell.parking ? `Parking: ${cell.parking} bays allocated` : null,
                     cell.vacancy_days != null ? `Vacant ${cell.vacancy_days} days` : null,
                     cell.masked ? 'Tenant masked for your role' : null,
+                    cell.sold ? `Title: sold to ${cell.investor ?? 'an investor'}` : cell.status !== 'Parking' ? 'Title: retained by developer' : null,
                   ].filter(Boolean).join('\n')
                   return (
                     <td key={c.building.building_id + c.wing} className="p-0">
                       <button
                         title={tip}
                         onClick={() => onCell?.(cell, c.building)}
-                        className={`flex h-[42px] w-full flex-col justify-center rounded border px-1.5 text-left leading-tight transition hover:ring-2 hover:ring-royal/40 ${st.cell}`}
+                        className={`relative flex h-[42px] w-full flex-col justify-center overflow-hidden rounded border px-1.5 text-left leading-tight transition hover:ring-2 hover:ring-royal/40 ${st.cell}`}
                       >
-                        <span className="truncate font-bold">{cell.masked ? <span className="italic">Leased</span> : cell.label}</span>
-                        <span className="truncate opacity-80">
+                        {cell.sold && (
+                          <>
+                            <span aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: SOLD_TEXTURE }} />
+                            <span className="absolute right-1 top-1 rounded-sm bg-ink/75 px-1 text-[8px] font-bold uppercase tracking-wide text-white">Sold</span>
+                          </>
+                        )}
+                        <span className={`relative truncate font-bold ${cell.sold ? 'pr-9' : ''}`}>{cell.masked ? <span className="italic">Leased</span> : cell.label}</span>
+                        <span className="relative truncate opacity-80">
                           {cell.status === 'Vacant'
                             ? `${cell.area ? fmtSft(cell.area) : ''}${cell.vacancy_days != null ? ` · ${cell.vacancy_days}d` : ''}`
                             : cell.status === 'Expiring' && cell.expiry

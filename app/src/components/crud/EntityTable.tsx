@@ -85,7 +85,10 @@ export default function EntityTable({ entity, rows, ctx, session, onOpen, hideCo
           />
         </div>
         {filterDefs.map((f) => {
-          const opts = optionsFor(f, {}, ctx).filter((o) => rows.some((r) => r[f.key] === o.value))
+          // Free-text fields (e.g. city) have no option list; offer the distinct values present instead.
+          const opts = f.options
+            ? optionsFor(f, {}, ctx).filter((o) => rows.some((r) => r[f.key] === o.value))
+            : [...new Set(rows.map((r) => r[f.key]).filter((v) => v != null && v !== ''))].sort().map((v) => ({ value: v, label: String(v) }))
           return (
             <select
               key={f.key}

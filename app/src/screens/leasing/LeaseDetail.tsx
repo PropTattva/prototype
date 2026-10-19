@@ -53,6 +53,9 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
   if (lease.status === 'Active' && toBreak != null && toBreak >= 0 && toBreak <= 180) alerts.push(<span key="b">Tenant break option in <b>{toBreak} days</b> ({fmtDate(lease.break_date)}).</span>)
   if ('deposit_received' in lease && !lease.deposit_received && lease.status === 'Active') alerts.push(<span key="d">Security deposit not yet received.</span>)
 
+  // rent is null (not stripped) when the lease came in without commercials
+  const pendingCapture = 'rent' in lease && lease.rent == null
+
   return (
     <>
       <div className="mb-1 text-xs text-ink-muted">
@@ -70,6 +73,13 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
         {api.permissions('lease', session).update && <button className="btn btn-primary" onClick={() => navigate(`leases/${id}/edit`)}>Edit lease</button>}
       </div>
 
+      {pendingCapture && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warn/40 bg-warn-bg px-4 py-2.5 text-[13px] text-[#6b4a00]">
+          <span><strong>Commercials not captured yet.</strong> Rent, CAM and escalation are missing, so this lease is left out of the rent roll.</span>
+          {api.permissions('lease', session).update && <button className="btn btn-gold" onClick={() => navigate(`rent-roll/capture/${lease.lease_id}`)}>Capture commercials →</button>}
+        </div>
+      )}
+
       {alerts.length > 0 && (
         <div className="mb-4 space-y-1 rounded-lg border-l-[3px] border-warn bg-warn-bg px-4 py-2.5 text-[13px] text-[#6b4a00]">
           {alerts.map((a, i) => <div key={i}>{a}</div>)}
@@ -78,8 +88,8 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
 
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KpiCard label="Leased area" value={lease.area.toLocaleString('en-IN')} unit="sq ft" />
-        <KpiCard label="Rent" value={lease.rent != null ? `₹${lease.rent}` : '—'} unit={lease.rent != null ? '/sq ft/mo' : ''} hint={lease.CAM != null ? `+ CAM ₹${lease.CAM}` : undefined} />
-        <KpiCard label="Annual rent" value={annual != null ? `₹${(annual / 1e7).toFixed(2)}` : '—'} unit={annual != null ? 'Cr' : ''} />
+        <KpiCard label="Rent" value={lease.rent != null ? `₹${lease.rent}` : pendingCapture ? 'Pending' : '—'} unit={lease.rent != null ? '/sq ft/mo' : ''} hint={lease.CAM != null ? `+ CAM ₹${lease.CAM}` : pendingCapture ? 'Not captured yet' : undefined} />
+        <KpiCard label="Annual rent" value={annual != null ? `₹${(annual / 1e7).toFixed(2)}` : pendingCapture ? 'Pending' : '—'} unit={annual != null ? 'Cr' : ''} hint={pendingCapture ? 'Needs rent to calculate' : undefined} />
         <KpiCard label="Expiry" value={fmtDate(lease.expiry)} hint={lease.status === 'Active' ? `${(toExpiry / 365).toFixed(1)} years remaining` : lease.status} />
       </div>
 

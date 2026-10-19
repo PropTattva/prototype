@@ -4,6 +4,7 @@ import { useApi } from '../../data/useApi'
 import { href, useRoute } from '../../state/router'
 import { useAuthed, useSession } from '../../state/SessionContext'
 import PtMark from '../ui/PtMark'
+import NeedsAction from '../NeedsAction'
 import { LockIcon } from '../crud/fields'
 import { useToast } from '../ui/Toast'
 import { navFor } from './nav'
@@ -73,8 +74,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
         </aside>
-        <main className="min-w-0 px-4 py-5 sm:px-7">{children}</main>
+        <main className="min-w-0 px-4 py-5 sm:px-7 sm:pr-12">{children}</main>
       </div>
+      <NeedsAction session={session} refreshKey={route} />
     </div>
   )
 }

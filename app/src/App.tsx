@@ -24,6 +24,7 @@ import Leases from './screens/leasing/Leases'
 import LeaseWizard from './screens/leasing/LeaseWizard'
 import Ledger from './screens/leasing/Ledger'
 import Renewals from './screens/leasing/Renewals'
+import RentRoll from './screens/leasing/RentRoll'
 import Login from './screens/Login'
 import AssessmentDetail from './screens/mandates/AssessmentDetail'
 import Assessments from './screens/mandates/Assessments'
@@ -36,6 +37,10 @@ import Subscription from './screens/Subscription'
 import Team from './screens/Team'
 import Reminders from './screens/vault/Reminders'
 import Sharing from './screens/vault/Sharing'
+import AvailabilityV2 from './screens/v2/AvailabilityV2'
+import BuildingsV2 from './screens/v2/BuildingsV2'
+import LeasesV2 from './screens/v2/LeasesV2'
+import StackingV2 from './screens/v2/StackingV2'
 import Vault from './screens/vault/Vault'
 import { href, navigate, useRoute } from './state/router'
 import { SessionProvider, useSession } from './state/SessionContext'
@@ -64,7 +69,7 @@ function SimplePage({ session, section, rest }: { session: Session; section: str
   const owner = session.role === 'Owner/Developer'
   const cfg: Record<string, { entity: EntityKey; subtitle: string }> = {
     campuses: { entity: 'campus', subtitle: 'Multi-building estates and tech parks, with shared amenities and the campus management company (E1-S16, S21).' },
-    occupiers: { entity: 'occupier', subtitle: 'Tenants and prospects, tagged by sector, GCC status and ultimate parent (E3-S07–S09). Shared across the platform.' },
+    occupiers: { entity: 'occupier', subtitle: 'Tenants and prospects, tagged by tier, sector, GCC status and parent entity (E3-S07–S09). Shared across the platform.' },
     owners: { entity: 'owner', subtitle: 'The owning party and its sub-type, with contacts, committee members and strata owners (E1-S08–S15).' },
     vendors: { entity: 'vendor', subtitle: 'Agencies and vendors engaged on mandates and campuses (E5-S02, E1-S16).' },
     targets: { entity: 'targetOccupier', subtitle: 'Pre-identified outreach targets per mandated building — AA-only, never shared externally (E5-S08).' },
@@ -107,16 +112,19 @@ function Screen({ session }: { session: Session }) {
         page = <Subscription />
         break
       case 'buildings':
-        page = rest[0] === 'new' ? <BuildingWizard /> : rest[0] ? <BuildingDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} /> : <Buildings rest={[]} />
+        page = rest[0] === 'new' ? <BuildingWizard /> : rest[0] === 'table' ? <Buildings rest={[]} /> : !rest[0] || rest[0] === 'in' ? <BuildingsV2 rest={rest} /> : <BuildingDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} />
         break
       case 'stacking':
-        page = <Stacking />
+        page = rest[0] === 'table' ? <Stacking /> : <StackingV2 rest={rest} />
         break
       case 'availability':
-        page = <Availability />
+        page = rest[0] === 'table' ? <Availability /> : <AvailabilityV2 rest={rest} />
         break
       case 'leases':
-        page = rest[0] === 'new' ? <LeaseWizard buildingId={rest[1]} /> : rest[0] ? <LeaseDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} /> : <Leases rest={[]} />
+        page = rest[0] === 'new' ? <LeaseWizard buildingId={rest[1]} /> : rest[0] === 'table' ? <Leases rest={[]} /> : !rest[0] || rest[0] === 'in' ? <LeasesV2 rest={rest} /> : <LeaseDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} />
+        break
+      case 'rent-roll':
+        page = <RentRoll key={rest.join('/')} rest={rest} />
         break
       case 'renewals':
         page = <Renewals rest={rest} />

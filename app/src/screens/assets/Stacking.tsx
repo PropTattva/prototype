@@ -5,6 +5,7 @@ import { navigate } from '../../state/router'
 import { useAuthed } from '../../state/SessionContext'
 import StackingPlan from '../../components/StackingPlan'
 import PageHeader from '../../components/ui/PageHeader'
+import { ViewToggle } from '../../components/drill/Drill'
 
 /** E4-S03 across a whole campus or a single building. */
 export default function Stacking() {
@@ -25,6 +26,7 @@ export default function Stacking() {
         title="Stacking plan"
         subtitle={masked ? 'Occupancy at a glance. Tenant names are masked for your role (§7.1).' : 'Floor-by-floor occupancy, expiries and vacancy age. Click a floor to open its lease or building.'}
         right={
+          <div className="flex flex-wrap items-center gap-2">
           <select className="input w-auto min-w-[240px]" value={choice} onChange={(e) => setPick(e.target.value)} aria-label="Campus or building">
             {campuses.length > 0 && (
               <optgroup label="Whole campus">
@@ -35,6 +37,8 @@ export default function Stacking() {
               {withFloors.map((b) => <option key={b.building_id} value={`building:${b.building_id}`}>{b.name}</option>)}
             </optgroup>
           </select>
+          <ViewToggle module="stacking" v2={false} />
+          </div>
         }
       />
       {!ids.length ? (

@@ -6,7 +6,7 @@ import type { Dataset } from '../domain/legacy'
 import { DOC_TYPES } from '../domain/assets'
 import type {
   Building, BuildingAmenity, BuildingDocument, BuildingFloor, Campus, CampusAmenity, Certification, DevelopmentStatus,
-  DocumentShare, FloorUnit, HandoverCondition, Owner, OwnerContact, OwnershipHistory,
+  DocumentShare, FloorUnit, HandoverCondition, InvestorType, Owner, OwnerContact, OwnershipHistory,
 } from '../domain/assets'
 import type { Lease, LeaseDoc, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from '../domain/leasing'
 import type { PlatformDb } from '../domain/platform'
@@ -35,7 +35,14 @@ function rng(seed: string) {
   }
 }
 
-const CITY_PIN: Record<string, string> = { 'City 1': '5600', 'City 2': '4110', 'City 3': '5000' }
+const INVESTORS: { name: string; type: InvestorType }[] = [
+  { name: 'Sahyadri Family Office', type: 'Family office' },
+  { name: 'Kaveri Income Fund I', type: 'Fund / AIF' },
+  { name: 'R. & S. Mehta', type: 'Individual' },
+  { name: 'Tungabhadra Holdings Pvt Ltd', type: 'Corporate' },
+  { name: 'Nilgiri Realty Trust', type: 'Fund / AIF' },
+]
+const CITY_PIN: Record<string, string> = { Bengaluru: '5600', Gurugram: '1220', Mumbai: '4000' }
 
 function timelineToDate(t: string, today: string): string | null {
   if (/immediate/i.test(t)) return today
@@ -71,7 +78,7 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
     total_area: p.msft ? Math.round(p.msft * 1e6) : null,
     num_buildings: demo.blocks.filter((b) => b.parkId === p.parkId).length,
     city: p.city,
-    location: p.location.replace(/,\s*City \d$/, ''),
+    location: p.location.replace(new RegExp(`,\\s*${p.city}$`), ''),
     development_status: p.status as DevelopmentStatus,
     acres: p.acres,
     management_company: p.ownerId === 'OWN-1' ? 'Northstar Facility Services' : null,
@@ -96,10 +103,10 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
       owner_id: ownerOf(p.ownerId),
       campus_id: `CMP-${p.parkId}`,
       name: `${p.name} – ${b.name}`,
-      address: `${b.name}, ${p.name}, ${p.location.replace(/,\s*City \d$/, '')}, ${p.city}`,
+      address: `${b.name}, ${p.name}, ${p.location.replace(new RegExp(`,\\s*${p.city}$`), '')}, ${p.city}`,
       pincode,
       city: p.city,
-      micro_market: p.location.replace(/,\s*City \d$/, '').replace(/\s*\(.*\)$/, ''),
+      micro_market: p.location.replace(new RegExp(`,\\s*${p.city}$`), '').replace(/\s*\(.*\)$/, ''),
       lat: geo?.lat ?? null,
       long: geo?.long ?? null,
       grade: preOc ? null : /gold/i.test(p.certification ?? '') ? 'A+' : 'A',
@@ -150,6 +157,11 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
       asking_rent: parking ? null : (p.askingRent ?? 95) + r.int(-8, 8),
       handover_condition: vacant ? handoverOf(listing?.handover ?? '') ?? 'Warm Shell' : null,
       available_from: vacant ? timelineToDate(listing?.timeline ?? 'Immediate', today) : null,
+      ownership: 'Retained',
+      investor_name: null,
+      investor_type: null,
+      sold_on: null,
+      sale_price_psf: null,
     })
   }
   // Blocks with no stacking data but floor-level listings (e.g. B1 5th floor, E9 4th–7th).
@@ -173,6 +185,36 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
       asking_rent: p.askingRent ?? 98,
       handover_condition: handoverOf(a.handover),
       available_from: timelineToDate(a.timeline, today),
+      ownership: 'Retained',
+      investor_name: null,
+      investor_type: null,
+      sold_on: null,
+      sale_price_psf: null,
+    })
+  }
+  // Sample floor-level title: D2 is a strata building sold floor-by-floor; a few other buildings have some floors
+  // sold to investors. Investor names are fictional sample values.
+  const SOLD_PLAN: Record<string, { share: number; investors: number[] }> = {
+    'BLD-D-D2': { share: 75, investors: [0, 1, 2] },
+    'BLD-A-A9': { share: 35, investors: [3, 2] },
+    'BLD-C-C2': { share: 30, investors: [4] },
+    'BLD-D-D6': { share: 40, investors: [1, 0] },
+    'BLD-F-F2': { share: 25, investors: [3] },
+  }
+  for (const f of floors) {
+    const plan = SOLD_PLAN[f.building_id]
+    if (!plan || f.floor_use === 'Parking') continue
+    const r = rng(`${f.floor_id}-title`)
+    if (r.int(0, 99) >= plan.share) continue
+    // Investors buy contiguous bands of floors, as they usually do in strata sales.
+    const band = Math.floor((Number(f.floor_no) || 0) / 4) % plan.investors.length
+    const inv = INVESTORS[plan.investors[band]]
+    Object.assign(f, {
+      ownership: 'Sold to investor',
+      investor_name: inv.name,
+      investor_type: inv.type,
+      sold_on: addDays(today, -r.int(200, 2400)),
+      sale_price_psf: r.int(95, 160) * 100,
     })
   }
   for (const b of buildings) {
@@ -213,9 +255,10 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
         is_startup: o.isStartup,
         parent_company: o.isGcc ? `${o.name} Holdings ${PARENTS[i]}` : o.isStartup ? null : `${o.name} Group`,
         parent_country: o.isGcc ? COUNTRIES[i] : 'India',
+        tier: null,
       }
     })
-  occupiers.push({ occupier_id: 'OC-UNDISCLOSED', name: 'Undisclosed', sector_tag: 'Other', is_gcc: false, is_startup: false, parent_company: null, parent_country: null })
+  occupiers.push({ occupier_id: 'OC-UNDISCLOSED', name: 'Undisclosed', sector_tag: 'Other', is_gcc: false, is_startup: false, parent_company: null, parent_country: null, tier: null })
   const occupierId = (name: string) => occupiers.find((o) => o.name === name)?.occupier_id ?? 'OC-UNDISCLOSED'
 
   // ---------------------------------------------------------------- leases (one per occupier per building, spanning floors)
@@ -273,7 +316,21 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
     const l = leases[leases.length - 1]
     l.escalation_freq = l.escalation_pct === 5 ? 'Annual' : 'Every 3 years'
     if (l.rent_free_months) l.rent_free_conditions = 'Fit-out period from handover; rent-free ends on occupation if earlier'
+    // ~1 in 8 leases arrive from the stacking import without commercials, pending capture on the rent roll.
+    // A separate stream keeps every other generated value unchanged.
+    if (rng(`${lease_id}-capture`).chance(0.12)) {
+      Object.assign(l, { rent: null, CAM: null, escalation_pct: null, escalation_freq: null, rent_free_months: null, rent_free_conditions: null, TI_contribution: null, deposit: null, deposit_months: null, source_tag: 'Manual' })
+    }
     fls.forEach((f, i) => spaces.push({ space_id: `SPC-${lease_id.slice(4)}-${i + 1}`, org_id: f.org_id, lease_id, floor_id: f.floor_id, unit_id: null, area: f.chargeable_area ?? 0 }))
+  }
+
+  // Sample tiering from portfolio footprint: 3 lakh+ sq ft (or a global GCC at 1.5 lakh+) is Tier 1, under 50k is
+  // Tier 3, the rest Tier 2. Startups top out at Tier 2.
+  for (const o of occupiers) {
+    if (o.occupier_id === 'OC-UNDISCLOSED') continue
+    const area = leases.filter((l) => l.occupier_id === o.occupier_id).reduce((s, l) => s + l.area, 0)
+    const tier1 = area >= 300000 || (o.is_gcc && area >= 150000)
+    o.tier = tier1 && !o.is_startup ? 'Tier 1' : area < 50000 ? 'Tier 3' : 'Tier 2'
   }
 
   // ---------------------------------------------------------------- renewals, abstracts, invoices, logs
@@ -281,7 +338,8 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
   const STAGES: LeaseRenewal['stage'][] = ['Initiated', 'Negotiating', 'Negotiating', 'Agreed', 'Lost']
   const renewals: LeaseRenewal[] = leases
     .filter((l) => l.expiry <= addDays(today, 365))
-    .filter((l) => rng(`${l.lease_id}-ren`).chance(0.65))
+    // Every third lease inside six months has no renewal yet, so the Needs-action panel has something to flag.
+    .filter((l, i) => (l.expiry <= addDays(today, 180) ? i % 3 !== 0 : rng(`${l.lease_id}-ren`).chance(0.65)))
     .map((l, i) => ({
       renewal_id: `REN-${String(i + 1).padStart(3, '0')}`,
       org_id: l.org_id,
@@ -306,7 +364,7 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
   }))
 
   const rent_invoices: RentInvoice[] = []
-  for (const l of leases.filter((x) => x.org_id !== 'OWN-3')) {
+  for (const l of leases.filter((x) => x.org_id !== 'OWN-3' && x.rent != null)) {
     for (let m = 4; m >= 1; m--) {
       const period = addMonths(today, -m + 1).slice(0, 7)
       const r = rng(`${l.lease_id}-${period}`)

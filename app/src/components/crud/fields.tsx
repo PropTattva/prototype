@@ -47,6 +47,8 @@ export function FieldValue({ f, rec, ctx, compact }: { f: FieldDef; rec: Rec; ct
   if (f.type === 'bool') return <>{v ? 'Yes' : 'No'}</>
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) {
     if (f.type === 'money' && f.key === 'price') return <span className="text-ink-soft">Custom</span>
+    // A lease without rent hasn't had its commercials captured yet (see the rent roll).
+    if (f.key === 'rent' && 'lease_id' in rec) return <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[11px] font-semibold text-[#7a5300]">Pending capture</span>
     return <span className="text-ink-muted">—</span>
   }
   const unit = f.unit && !compact ? <span className="ml-1 text-ink-muted">{f.unit}</span> : null

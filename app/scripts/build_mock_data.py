@@ -187,6 +187,14 @@ data = {
     "occupiers": occupiers,
     "transactions": transactions,
 }
+# The dataset anonymises cities; give them real names so the demo reads naturally.
+CITY_NAMES = {"City 1": "Bengaluru", "City 2": "Gurugram", "City 3": "Mumbai"}
+# Move one Northstar park so the owner demo spans two cities.
+for p in parks:
+    if p["parkId"] == "D":
+        p["city"], p["location"] = "City 2", "Location 2B, City 2"
+text = json.dumps(data, indent=1, ensure_ascii=False)
+text = re.sub(r"\bCity [123]\b", lambda m: CITY_NAMES[m.group(0)], text)
 OUT.parent.mkdir(parents=True, exist_ok=True)
-OUT.write_text(json.dumps(data, indent=1, ensure_ascii=False))
+OUT.write_text(text)
 print({k: len(v) for k, v in data.items()}, file=sys.stderr)

@@ -80,6 +80,10 @@ export interface Building {
 
 export type OccupancyType = 'Self-occupied' | 'Leased' | 'Vacant' | 'Partially leased'
 
+/** ext: who holds title to a floor. Strata / investor sales split a building's floors across owners. */
+export type FloorOwnership = 'Retained' | 'Sold to investor'
+export type InvestorType = 'Individual' | 'Family office' | 'Fund / AIF' | 'Corporate'
+
 export interface BuildingFloor {
   floor_id: string
   org_id: string
@@ -101,6 +105,13 @@ export interface BuildingFloor {
   /** ext: availability listing */
   handover_condition: HandoverCondition | null
   available_from: string | null
+  /** ext: floor-level title — retained by the developer or sold to an investor */
+  ownership: FloorOwnership
+  investor_name: string | null
+  investor_type: InvestorType | null
+  sold_on: string | null
+  /** INR / sq ft (chargeable) */
+  sale_price_psf: number | null
 }
 
 export interface FloorUnit {

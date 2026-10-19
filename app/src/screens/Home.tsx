@@ -9,7 +9,7 @@ export default function Home() {
   const session = useAuthed()
   return (
     <>
-      <PageHeader title={`Welcome, ${session.org.name}`} subtitle={`${session.user.name} · ${session.role} · ${session.plan?.name ?? 'No plan'}`} />
+      <PageHeader title={`Welcome, ${session.user.name.split(' ')[0]}`} subtitle={`${session.org.name} · ${session.role} · ${session.plan?.name ?? 'No plan'}`} />
       <div className="grid gap-3.5 md:grid-cols-2">
         <Card title="Your plan includes">
           <ul className="space-y-1 text-[13px] text-ink-soft">

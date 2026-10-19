@@ -8,6 +8,7 @@ import { useAuthed } from '../../state/SessionContext'
 import Badge from '../../components/ui/Badge'
 import KpiCard from '../../components/ui/KpiCard'
 import PageHeader from '../../components/ui/PageHeader'
+import { ViewToggle } from '../../components/drill/Drill'
 import { LockIcon } from '../../components/crud/fields'
 
 const AGE = [
@@ -45,7 +46,7 @@ export default function Availability() {
 
   return (
     <>
-      <PageHeader title="Availability" subtitle="Vacant and part-leased floors plus under-construction buildings on the market." />
+      <PageHeader title="Availability" subtitle="Vacant and part-leased floors plus under-construction buildings on the market." right={<ViewToggle module="availability" v2={false} />} />
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <KpiCard label="Spaces" value={rows.length} hint={`${new Set(rows.map((r) => r.building_id)).size} buildings`} />
         <KpiCard label="Total available" value={fmtSft(total)} unit="sq ft" />

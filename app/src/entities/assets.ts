@@ -133,7 +133,7 @@ const building: EntityDef = {
     { key: 'micro_market', label: 'Micro-market', type: 'text', required: true, column: true, placeholder: 'e.g. ORR, Whitefield' },
     { key: 'lat', label: 'Latitude', type: 'decimal' },
     { key: 'long', label: 'Longitude', type: 'decimal' },
-    { key: 'grade', label: 'Grade', type: 'enum', options: ['A+', 'A', 'B', 'C'], system: true, column: true },
+    { key: 'grade', label: 'Grade', type: 'enum', options: ['A+', 'A', 'B', 'C'], system: true },
     { key: 'grade_source', label: 'Grade source', type: 'enum', options: ['Indicative (calculator)', 'AA scorecard', 'Imported'], system: true, help: 'The calculator grade stays indicative until an AA scorecard overrides it (E1-S04).' },
     { key: 'grade_assessed_at', label: 'Graded on', type: 'datetime', system: true },
     { key: 'total_area', label: 'Total chargeable area', type: 'decimal', unit: 'sq ft', column: true },
@@ -146,7 +146,7 @@ const building: EntityDef = {
     { key: 'published', label: 'Published to occupiers & brokers', type: 'bool', column: true, help: 'Public fields become visible to occupiers and brokers.' },
     { key: 'building_id', label: 'Building ID', type: 'text', system: true },
   ],
-  filters: ['org_id', 'city', 'status', 'grade'],
+  filters: ['org_id', 'city', 'status'],
   searchKeys: ['name', 'micro_market', 'city', 'address'],
   newId: () => shortId('BLD'),
   defaults: (ctx) => ({
@@ -203,6 +203,8 @@ const building: EntityDef = {
 
 const occupancyNeedsVacancy = (d: Rec) => d.occupancy_type === 'Vacant' || d.occupancy_type === 'Partially leased'
 
+const soldFloor = (d: Rec) => d.ownership === 'Sold to investor'
+
 const floor: EntityDef = {
   key: 'floor',
   name: 'BuildingFloor',
@@ -230,16 +232,22 @@ const floor: EntityDef = {
     { key: 'asking_rent', label: 'Asking rent', type: 'money', unit: '₹/sq ft/mo', visibility: 'owner', column: true, showIf: (d) => d.floor_use !== 'Parking' },
     { key: 'handover_condition', label: 'Handover condition', type: 'enum', options: ['Warm Shell', 'Furnished', 'BTS'], showIf: occupancyNeedsVacancy },
     { key: 'available_from', label: 'Available from', type: 'date', showIf: occupancyNeedsVacancy },
+    { key: 'ownership', label: 'Title', type: 'enum', options: ['Retained', 'Sold to investor'], required: true, column: true, showIf: (d) => d.floor_use !== 'Parking', help: 'Who holds title to this floor — the developer, or an investor it was sold to.' },
+    { key: 'investor_name', label: 'Investor', type: 'text', visibility: 'owner', showIf: soldFloor },
+    { key: 'investor_type', label: 'Investor type', type: 'enum', options: ['Individual', 'Family office', 'Fund / AIF', 'Corporate'], visibility: 'owner', showIf: soldFloor },
+    { key: 'sold_on', label: 'Sold on', type: 'date', visibility: 'owner', showIf: soldFloor },
+    { key: 'sale_price_psf', label: 'Sale price', type: 'money', unit: '₹/sq ft', visibility: 'owner', showIf: soldFloor },
     { key: 'floor_id', label: 'Floor ID', type: 'text', system: true },
   ],
-  filters: ['occupancy_type', 'floor_use'],
+  filters: ['occupancy_type', 'floor_use', 'ownership'],
   searchKeys: ['floor_no', 'wing'],
   newId: () => shortId('FLR'),
-  defaults: () => ({ floor_use: 'Office', occupancy_type: 'Vacant', vacant_since: todayIso() }),
+  defaults: () => ({ floor_use: 'Office', occupancy_type: 'Vacant', vacant_since: todayIso(), ownership: 'Retained' }),
   validate: (d, db, _m, orig) => {
     const e: Record<string, string> = {}
     if (d.carpet_area != null && d.chargeable_area != null && d.carpet_area > d.chargeable_area) e.carpet_area = 'Carpet area cannot exceed chargeable area.'
     if (d.occupancy_type === 'Self-occupied' && !d.self_occupied_entity?.trim()) e.self_occupied_entity = 'Name the group company occupying this floor.'
+    if (d.ownership === 'Sold to investor' && !d.investor_name?.trim()) e.investor_name = 'Name the investor who bought this floor.'
     const clash = db.floors.find((f) => f.building_id === d.building_id && f.floor_no === d.floor_no && (f.wing ?? '') === (d.wing ?? '') && f.floor_id !== orig?.floor_id)
     if (clash) e.floor_no = 'This floor already exists in the building.'
     return e
