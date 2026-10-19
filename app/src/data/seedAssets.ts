@@ -316,11 +316,6 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
     const l = leases[leases.length - 1]
     l.escalation_freq = l.escalation_pct === 5 ? 'Annual' : 'Every 3 years'
     if (l.rent_free_months) l.rent_free_conditions = 'Fit-out period from handover; rent-free ends on occupation if earlier'
-    // ~1 in 8 leases arrive from the stacking import without commercials, pending capture on the rent roll.
-    // A separate stream keeps every other generated value unchanged.
-    if (rng(`${lease_id}-capture`).chance(0.12)) {
-      Object.assign(l, { rent: null, CAM: null, escalation_pct: null, escalation_freq: null, rent_free_months: null, rent_free_conditions: null, TI_contribution: null, deposit: null, deposit_months: null, source_tag: 'Manual' })
-    }
     fls.forEach((f, i) => spaces.push({ space_id: `SPC-${lease_id.slice(4)}-${i + 1}`, org_id: f.org_id, lease_id, floor_id: f.floor_id, unit_id: null, area: f.chargeable_area ?? 0 }))
   }
 
