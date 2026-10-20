@@ -24,7 +24,6 @@ import Leases from './screens/leasing/Leases'
 import LeaseWizard from './screens/leasing/LeaseWizard'
 import Ledger from './screens/leasing/Ledger'
 import Renewals from './screens/leasing/Renewals'
-import RentRoll from './screens/leasing/RentRoll'
 import Login from './screens/Login'
 import AssessmentDetail from './screens/mandates/AssessmentDetail'
 import Assessments from './screens/mandates/Assessments'
@@ -122,9 +121,6 @@ function Screen({ session }: { session: Session }) {
         break
       case 'leases':
         page = rest[0] === 'new' ? <LeaseWizard buildingId={rest[1]} /> : rest[0] === 'table' ? <Leases rest={[]} /> : !rest[0] || rest[0] === 'in' ? <LeasesV2 rest={rest} /> : <LeaseDetail key={rest[0]} id={rest[0]} rest={rest.slice(1)} />
-        break
-      case 'rent-roll':
-        page = <RentRoll key={rest.join('/')} rest={rest} />
         break
       case 'renewals':
         page = <Renewals rest={rest} />

@@ -7,6 +7,7 @@ import { href, navigate } from '../../state/router'
 import { useAuthed } from '../../state/SessionContext'
 import EntityPage from '../../components/crud/EntityPage'
 import { ViewToggle } from '../../components/drill/Drill'
+import RentRollCard from '../../components/rentroll/RentRollCard'
 import { leaseFilter, LeaseViewPills, type LeaseView } from './LeaseViews'
 
 /** E3-S01: the lease register per asset, with the expiry and break views that drive renewals. */
@@ -14,6 +15,7 @@ export default function Leases({ rest }: { rest: string[] }) {
   const session = useAuthed()
   const [view, setView] = useState<LeaseView>('all')
   const { data: all } = useApi(() => api.list('lease', session), [session.user.user_id])
+  const { data: ctx } = useApi(() => api.getOptionCtx(session), [session.user.user_id])
   const leases = (all as Lease[] | undefined) ?? []
   const active = leases.filter((l) => l.status === 'Active')
   const rentRoll = active.filter((l) => l.rent != null).reduce((s, l) => s + l.rent! * l.area * 12, 0)
@@ -33,6 +35,7 @@ export default function Leases({ rest }: { rest: string[] }) {
       banner={
         <>
           <div className="mb-3 flex justify-end"><ViewToggle module="leases" v2={false} /></div>
+          {ctx && <RentRollCard leases={leases} ctx={ctx} scope="Portfolio" />}
           <LeaseViewPills leases={leases} view={view} onChange={setView} />
         </>
       }

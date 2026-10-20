@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import * as api from '../../data/api'
 import { useApi } from '../../data/useApi'
 import type { Lease } from '../../domain/leasing'
@@ -14,6 +14,8 @@ import RecordDrawer from '../../components/crud/RecordDrawer'
 import Badge, { StatusBadge } from '../../components/ui/Badge'
 import Card from '../../components/ui/Card'
 import KpiCard from '../../components/ui/KpiCard'
+import CaptureDrawer from '../../components/rentroll/CaptureDrawer'
+import LeaseRentRoll from '../../components/rentroll/LeaseRentRoll'
 
 const TABS: { key: string; label: string; entity: EntityKey }[] = [
   { key: 'spaces', label: 'Spaces', entity: 'leaseSpace' },
@@ -36,6 +38,7 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
   const { data: l, error } = useApi(() => api.get('lease', id, session), [id, session.user.user_id])
   const { data: ctx } = useApi(() => api.getOptionCtx(session), [session.user.user_id])
   const [tabKey = 'spaces', ...more] = rest
+  const [capturing, setCapturing] = useState(false)
   if (error) return <p className="rounded-lg border border-crit/30 bg-crit-bg px-4 py-3 text-sm text-crit">{error.message}</p>
   if (!l || !ctx) return null
   const lease = l as Lease
@@ -76,7 +79,7 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
       {pendingCapture && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warn/40 bg-warn-bg px-4 py-2.5 text-[13px] text-[#6b4a00]">
           <span><strong>Commercials not captured yet.</strong> Rent, CAM and escalation are missing, so this lease is left out of the rent roll.</span>
-          {api.permissions('lease', session).update && <button className="btn btn-gold" onClick={() => navigate(`rent-roll/capture/${lease.lease_id}`)}>Capture commercials →</button>}
+          {api.permissions('lease', session).update && <button className="btn btn-gold" onClick={() => setCapturing(true)}>Capture commercials →</button>}
         </div>
       )}
 
@@ -110,6 +113,9 @@ export default function LeaseDetail({ id, rest }: { id: string; rest: string[] }
           </Card>
         ))}
       </div>
+
+      <LeaseRentRoll lease={lease} onCapture={api.permissions('lease', session).update ? () => setCapturing(true) : undefined} />
+      {capturing && <CaptureDrawer lease={lease} ctx={ctx} session={session} onClose={() => setCapturing(false)} />}
 
       <nav className="mb-4 flex gap-0.5 overflow-x-auto border-b border-line">
         {tabs.map((t) => (

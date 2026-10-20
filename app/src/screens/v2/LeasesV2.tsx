@@ -9,6 +9,7 @@ import { href, navigate } from '../../state/router'
 import { useAuthed } from '../../state/SessionContext'
 import Drill from '../../components/drill/Drill'
 import EntityTable from '../../components/crud/EntityTable'
+import RentRollCard from '../../components/rentroll/RentRollCard'
 import { leaseFilter, LeaseViewPills, type LeaseView } from '../leasing/LeaseViews'
 
 /** V2 lease register: city → building → that building's leases. The view pills filter every level. */
@@ -50,7 +51,12 @@ export default function LeasesV2({ rest }: { rest: string[] }) {
       rest={rest}
       ctx={ctx}
       include={(b) => leased.has(b.building_id)}
-      toolbar={<LeaseViewPills leases={scoped} view={view} onChange={setView} />}
+      toolbar={
+        <>
+          <RentRollCard leases={scoped} ctx={ctx} scope={rest[2] ? ctx.buildings.find((b) => b.building_id === rest[2])?.name ?? 'Building' : rest[0] === 'in' && rest[1] ? rest[1] : 'Portfolio'} />
+          <LeaseViewPills leases={scoped} view={view} onChange={setView} />
+        </>
+      }
       stats={(ids) => {
         const ls = inBuildings(ids)
         const active = ls.filter((l) => l.status === 'Active')
