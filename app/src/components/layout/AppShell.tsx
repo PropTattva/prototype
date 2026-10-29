@@ -29,7 +29,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen">
       <div className="sticky top-0 z-40">
         {session.readOnly && (
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-gold px-4 py-1.5 text-center text-xs font-semibold text-royal-dark">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-gold px-4 py-1.5 text-center text-xs font-semibold text-white">
             <span>
               Viewing as <strong>{session.user.name}</strong> ({session.role}, {session.org.name}) — read-only. Signed in as {session.actor.name}.
             </span>
@@ -39,9 +39,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <header className="flex items-center justify-between gap-3 border-b-2 border-gold bg-white px-4 py-2.5 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <PtMark />
-            <span className="text-[17px] font-extrabold tracking-tight text-royal">Platform</span>
+            <span className="hidden border-l border-line pl-3 text-[13px] font-semibold text-ink-muted sm:inline">Platform</span>
             <span className="hidden rounded-[3px] bg-royal px-2 py-[3px] font-mono text-[10px] font-semibold text-white sm:inline">{TAG[session.role]}</span>
-            {session.plan && <span className="hidden rounded-[3px] bg-gold px-2 py-[3px] text-[10px] font-bold text-royal-dark md:inline">{session.plan.name}</span>}
+            {session.plan && <span className="hidden rounded-[3px] bg-gold px-2 py-[3px] text-[10px] font-bold text-white md:inline">{session.plan.name}</span>}
           </div>
           <UserMenu />
         </header>
@@ -61,7 +61,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                       active(i.path) ? 'bg-royal text-white' : 'text-ink-soft hover:bg-royal-soft hover:text-royal'
                     }`}
                   >
-                    <span className={`inline-flex w-4 justify-center text-sm ${active(i.path) ? 'text-gold' : ''}`}>{i.icon}</span>
+                    <span className={`inline-flex w-4 justify-center text-sm ${active(i.path) ? 'text-gold-bright' : ''}`}>{i.icon}</span>
                     {i.label}
                     {i.feature && !hasFeature(session, i.feature) && (
                       <span className="ml-auto text-ink-muted" title="Not in your plan">
@@ -107,7 +107,7 @@ function UserMenu() {
         className="flex items-center gap-2 rounded-full border border-line bg-canvas py-1 pl-1 pr-3 text-xs hover:border-royal"
         aria-expanded={open}
       >
-        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-royal text-[11px] font-bold text-gold">{initials(me.name)}</span>
+        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-royal text-[11px] font-bold text-gold-bright">{initials(me.name)}</span>
         <span className="hidden text-left sm:block">
           <span className="block font-semibold leading-tight text-ink">{me.name}</span>
           <span className="block text-[11px] leading-tight text-ink-muted">{me.role} · {session.readOnly ? 'PropTattva' : session.org.name}</span>

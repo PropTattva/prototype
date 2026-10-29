@@ -25,11 +25,11 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-royal to-royal-dark p-4 sm:p-5">
       <div className="w-full max-w-[580px] rounded-[14px] border-t-4 border-gold bg-white p-6 shadow-[0_25px_70px_rgba(0,0,0,0.3)] sm:p-10">
-        <div className="mb-1.5 flex items-center gap-3.5">
+        <div className="mb-2 flex items-center gap-3.5">
           <PtMark size="lg" />
-          <h1 className="text-[26px] font-extrabold tracking-tight text-royal">Platform</h1>
+          <h1 className="border-l border-line pl-3.5 text-[15px] font-semibold text-ink-muted">Platform</h1>
         </div>
-        <p className="mb-6 text-[13px] text-ink-muted sm:ml-[70px]">India commercial real estate · secure · simple</p>
+        <p className="mb-6 text-[13px] text-ink-muted">India commercial real estate · secure · simple</p>
 
         <div className="mb-4 rounded-[5px] border-l-[3px] border-gold bg-gold-light px-3.5 py-2.5 text-[11px] leading-relaxed text-royal-dark">
           <strong>Corporate email required.</strong> Login requires an email at your company domain (e.g. name@yourcompany.com). Personal emails (gmail, outlook) blocked unless approved by AA / N8 / PT admin.
@@ -45,7 +45,7 @@ export default function Login() {
                   onClick={() => setPersona(p.type)}
                   className="group flex items-center gap-4 rounded-[10px] border-[1.5px] border-line bg-white px-5 py-[18px] text-left transition hover:-translate-y-px hover:border-royal hover:shadow-[0_6px_20px_rgba(30,58,138,0.12)]"
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-royal-soft text-base font-extrabold text-royal group-hover:bg-gold group-hover:text-royal-dark">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-royal-soft text-base font-extrabold text-royal group-hover:bg-gold group-hover:text-white">
                     {p.letter}
                   </span>
                   <span>
@@ -70,7 +70,7 @@ export default function Login() {
                     onClick={() => signInAs(user.user_id).catch((e) => toast('error', e.message))}
                     className="flex w-full items-center gap-3 rounded-lg border border-line px-4 py-3 text-left transition enabled:hover:border-royal enabled:hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-royal text-xs font-bold text-gold">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-royal text-xs font-bold text-gold-bright">
                       {user.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}
                     </span>
                     <span className="min-w-0 flex-1">

@@ -6,7 +6,7 @@ import { fmtSft } from '../lib/format'
 export const STACK_STYLE: Record<StackStatus, { cell: string; dot: string; label: string }> = {
   Occupied: { cell: 'bg-royal-soft text-royal-dark border-royal/15', dot: 'bg-royal-soft border-royal/30', label: 'Occupied' },
   Expiring: { cell: 'bg-warn-bg text-[#7a5300] border-warn/30', dot: 'bg-warn-bg border-warn/40', label: 'Expiring ≤ 12 mo' },
-  Partial: { cell: 'bg-[repeating-linear-gradient(135deg,#eaefff_0_6px,#e4f3ea_6px_12px)] text-royal-dark border-royal/15', dot: 'bg-[repeating-linear-gradient(135deg,#eaefff_0_3px,#e4f3ea_3px_6px)] border-royal/30', label: 'Part leased' },
+  Partial: { cell: 'bg-[repeating-linear-gradient(135deg,#e9eef5_0_6px,#e4f3ea_6px_12px)] text-royal-dark border-royal/15', dot: 'bg-[repeating-linear-gradient(135deg,#e9eef5_0_3px,#e4f3ea_3px_6px)] border-royal/30', label: 'Part leased' },
   Vacant: { cell: 'bg-ok-bg text-ok border-ok/25', dot: 'bg-ok-bg border-ok/40', label: 'Vacant' },
   'Self-use': { cell: 'bg-[#efe8fa] text-[#57368a] border-[#57368a]/20', dot: 'bg-[#efe8fa] border-[#57368a]/30', label: 'Self-use' },
   Parking: { cell: 'bg-hover text-ink-muted border-line', dot: 'bg-hover border-line', label: 'Parking / MLCP' },

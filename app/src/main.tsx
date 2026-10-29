@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import '@fontsource/aileron/latin-700.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

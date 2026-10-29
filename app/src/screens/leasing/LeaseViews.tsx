@@ -33,7 +33,7 @@ export function LeaseViewPills({ leases, view, onChange }: { leases: Lease[]; vi
             className={`flex items-center gap-2.5 rounded-full border-2 px-5 py-2.5 text-sm font-bold transition ${on ? 'border-royal bg-royal text-white shadow-sm' : 'border-line bg-white text-ink-soft hover:border-royal hover:text-royal'}`}
           >
             {v.label}
-            <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${on ? 'bg-gold text-royal-dark' : 'bg-hover text-ink'}`}>{leases.filter(leaseFilter(v.key)).length}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${on ? 'bg-gold text-white' : 'bg-hover text-ink'}`}>{leases.filter(leaseFilter(v.key)).length}</span>
           </button>
         )
       })}

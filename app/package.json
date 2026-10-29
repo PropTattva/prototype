@@ -10,6 +10,7 @@
     "mock-data": "python3 -I scripts/build_mock_data.py"
   },
   "dependencies": {
+    "@fontsource/aileron": "^5.3.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

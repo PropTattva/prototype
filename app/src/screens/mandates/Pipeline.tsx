@@ -150,7 +150,7 @@ export default function Pipeline({ rest }: { rest: string[] }) {
               </header>
               {cards.map((o) => (
                 <button key={o.opp_id} onClick={() => navigate(`pipeline/${o.opp_id}`)} className={`relative mb-2 block w-full rounded border-l-[3px] p-2.5 text-left text-[11px] hover:bg-royal-soft ${won ? 'bg-white' : 'bg-canvas'} ${(o.probability ?? 0) >= 50 && !won ? 'border-gold' : 'border-royal'}`}>
-                  <span className="absolute right-2 top-2 rounded-[3px] bg-royal px-1.5 text-[9px] font-bold text-gold">{initials(userName(o.owner_user_id))}</span>
+                  <span className="absolute right-2 top-2 rounded-[3px] bg-royal px-1.5 text-[9px] font-bold text-gold-bright">{initials(userName(o.owner_user_id))}</span>
                   <span className="block pr-7 text-xs font-bold text-ink">{o.account_name}</span>
                   <span className="block text-[10px] text-ink-muted">{o.team} · {o.deal_type}</span>
                   <span className="block font-bold text-royal">₹{o.potential_lakh ?? '—'} L{o.probability != null && !won ? ` · ${o.probability}% prob` : ''}</span>

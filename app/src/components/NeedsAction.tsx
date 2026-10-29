@@ -59,7 +59,7 @@ export default function NeedsAction({ session, refreshKey }: { session: Session;
             return (
               <button key={k.key} onClick={() => setKind(k.key)} className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${on ? 'border-royal bg-royal text-white' : 'border-line bg-white text-ink-soft hover:border-royal hover:text-royal'}`}>
                 {k.label}
-                <span className={on ? 'text-gold' : 'text-ink-muted'}>{n}</span>
+                <span className={on ? 'text-gold-bright' : 'text-ink-muted'}>{n}</span>
               </button>
             )
           })}
