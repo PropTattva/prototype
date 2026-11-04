@@ -12,28 +12,9 @@ import type { Lease, LeaseDoc, LeaseRenewal, LeaseSpace, Occupier, OccupierBroke
 import type { PlatformDb } from '../domain/platform'
 import { addDays, addMonths, todayIso } from '../lib/dates'
 import { geocode } from '../lib/geo'
+import { rng } from '../lib/rng'
 
 const demo = raw as Dataset
-
-/** Deterministic PRNG (mulberry32) seeded from a string, so every record's sample values are stable. */
-function rng(seed: string) {
-  let h = 1779033703 ^ seed.length
-  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 3432918353)
-  let a = h >>> 0
-  const next = () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-  return {
-    next,
-    int: (lo: number, hi: number) => lo + Math.floor(next() * (hi - lo + 1)),
-    pick: <T,>(xs: readonly T[]) => xs[Math.floor(next() * xs.length)],
-    chance: (p: number) => next() < p,
-  }
-}
 
 const INVESTORS: { name: string; type: InvestorType }[] = [
   { name: 'Sahyadri Family Office', type: 'Family office' },
@@ -58,7 +39,7 @@ function timelineToDate(t: string, today: string): string | null {
 
 const handoverOf = (h: string): HandoverCondition | null => (h === 'Warm Shell' || h === 'Furnished' || h === 'BTS' ? h : null)
 
-export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 'invites' | 'plans' | 'subscriptions' | 'audit_log' | 'mandates' | 'vendors' | 'target_occupiers' | 'assessments' | 'assessment_criteria' | 'opportunities' | 'access_requests' | 'bays' | 'parking_rates'> {
+export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 'invites' | 'plans' | 'subscriptions' | 'audit_log' | 'mandates' | 'vendors' | 'target_occupiers' | 'assessments' | 'assessment_criteria' | 'bays' | 'parking_rates' | 'crm_accounts' | 'crm_contacts' | 'crm_activities' | 'crm_picklists'> {
   const today = todayIso()
   const parks = demo.parks
 

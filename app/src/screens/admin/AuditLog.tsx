@@ -46,7 +46,7 @@ export default function AuditLog() {
     <>
       <PageHeader
         title="Audit log"
-        subtitle={session.role === 'Super Admin' ? 'Every create, update, delete, login, export and View-as across all tenants. Entries cannot be edited.' : 'Actions taken by the PropTattva team (AA scope).'}
+        subtitle={session.role === 'Super Admin' ? 'Every create, update, delete, login, export and View-as across all tenants. Entries cannot be edited.' : 'Actions taken by internal staff — PropTattva and the Asset Advantage (AA) team.'}
       />
       <div className="mb-3 flex flex-wrap gap-2 rounded-lg border border-line bg-white p-3">
         {session.role === 'Super Admin' && (

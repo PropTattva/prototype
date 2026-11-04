@@ -3,11 +3,16 @@ import type {
   Building, BuildingAmenity, BuildingDocument, BuildingFloor, BuildingImage, Campus, CampusAmenity, Certification,
   DocumentShare, FloorUnit, Owner, OwnerContact, OwnershipHistory,
 } from './assets'
-import type { AccessRequest, AssessmentCriterion, BuildingAssessment, Mandate, Opportunity, TargetOccupier, Vendor } from './mandates'
+import type { CrmAccount, CrmActivity, CrmContact, CrmPicklist } from './crm'
+import type { AssessmentCriterion, BuildingAssessment, Mandate, TargetOccupier, Vendor } from './mandates'
 import type { Bay, ParkingRate } from './parking'
 import type { LeaseDoc, Lease, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from './leasing'
 
-export type OrgType = 'PropTattva' | 'Owner' | 'Occupier' | 'Enabler'
+/** PropTattva = platform owner; Advisory = the AA (Asset Advantage) internal team, a separate org. */
+export type OrgType = 'PropTattva' | 'Advisory' | 'Owner' | 'Occupier' | 'Enabler'
+
+/** Orgs whose people are internal staff (not customers): platform owner and the AA team. */
+export const INTERNAL_ORG_TYPES: OrgType[] = ['PropTattva', 'Advisory']
 export type EnablerType =
   | 'Broker firm'
   | 'Campus management company'
@@ -52,7 +57,7 @@ export interface Invite {
   status: InviteStatus
 }
 
-export type PlanAppliesTo = 'Owner' | 'Occupier' | 'Enabler'
+export type PlanAppliesTo = 'Owner' | 'Occupier' | 'Enabler' | 'Advisory'
 
 export interface SubscriptionPlan {
   plan_code: string
@@ -129,14 +134,17 @@ export interface PlatformDb {
   rent_invoices: RentInvoice[]
   broker_log: OccupierBrokerLog[]
   relationship_log: RelationshipLog[]
-  // mandate & GTM (E5) + v6 BD pipeline
+  // mandate & GTM (E5)
   vendors: Vendor[]
   target_occupiers: TargetOccupier[]
   assessments: BuildingAssessment[]
   assessment_criteria: AssessmentCriterion[]
-  opportunities: Opportunity[]
-  access_requests: AccessRequest[]
   // parking (E6)
   bays: Bay[]
   parking_rates: ParkingRate[]
+  // CRM (all personas; the BD pipeline is accounts with a stage)
+  crm_accounts: CrmAccount[]
+  crm_contacts: CrmContact[]
+  crm_activities: CrmActivity[]
+  crm_picklists: CrmPicklist[]
 }

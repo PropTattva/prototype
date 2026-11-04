@@ -1,10 +1,9 @@
-// Mandate & GTM (E5), BD pipeline (v6) and parking (E6) entity definitions.
+// Mandate & GTM (E5) and parking (E6) entity definitions.
 import type { PlatformDb } from '../domain/platform'
 import { buildingName, buildingOptions, leaseOptions, occupierName, occupierOptions, plural, shortId } from './helpers'
 import type { EntityDef, EntityKey, OptionCtx, Rec } from './types'
 
 export const EXEC_MODES = ['Internal (owner team)', 'AA team', 'External agency', 'Hybrid'] as const
-export const OPP_STAGES = ['Prospect', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
 const FREQ = ['Annual', 'Biennial', 'Every 3 years']
 
 const inheritFromBuilding = (d: Rec, db: PlatformDb) => {
@@ -172,37 +171,6 @@ const assessmentCriterion: EntityDef = {
   validate: (d) => (d.score != null && (d.score < 0 || d.score > 10) ? { score: 'Score 0–10.' } : {}),
 }
 
-const opportunity: EntityDef = {
-  key: 'opportunity',
-  name: 'Opportunity',
-  label: 'Opportunity',
-  plural: 'Opportunities',
-  idKey: 'opp_id',
-  capability: 'bd',
-  orgKey: null,
-  title: (r) => r.account_name,
-  subtitle: (r) => `${r.team} · ${r.stage}`,
-  fields: [
-    { key: 'account_name', label: 'Company', type: 'text', required: true, column: true },
-    { key: 'stage', label: 'Stage', type: 'enum', options: OPP_STAGES, required: true, column: true },
-    { key: 'deal_type', label: 'Deal type', type: 'enum', options: ['New office', 'Expansion', 'Renewal', 'Relocation'], required: true, column: true },
-    { key: 'team', label: 'Team', type: 'enum', options: ['AA', 'N8'], required: true, column: true },
-    { key: 'potential_lakh', label: 'Mandate potential', type: 'decimal', unit: '₹ L', column: true },
-    { key: 'probability', label: 'Probability', type: 'percent', column: true },
-    { key: 'owner_user_id', label: 'BD owner', type: 'ref', options: (_d, ctx) => ctx.users.filter((u) => u.org_id === 'ORG-PT').map((u) => ({ value: u.user_id, label: u.name })), adminOnly: true, column: true },
-    { key: 'last_activity', label: 'Last activity', type: 'datetime', system: true, column: true },
-    { key: 'notes', label: 'Notes', type: 'textarea' },
-  ],
-  filters: ['stage', 'team'],
-  searchKeys: ['account_name', 'notes'],
-  newId: () => shortId('OPP'),
-  defaults: () => ({ stage: 'Prospect', deal_type: 'New office', team: 'AA', co_owners: [] }),
-  derive: (d, _db, mode) => {
-    d.last_activity = new Date().toISOString()
-    if (mode === 'create') d.co_owners = d.co_owners ?? []
-  },
-}
-
 const bayLeaseOptions = (d: Rec, ctx: OptionCtx) => leaseOptions({ ...ctx, leases: ctx.leases.filter((l) => l.building_id === d.building_id && l.status === 'Active') })
 
 const bay: EntityDef = {
@@ -280,5 +248,5 @@ const parkingRate: EntityDef = {
 }
 
 export const MANDATE_ENTITIES: Partial<Record<EntityKey, EntityDef>> = {
-  mandate, vendor, targetOccupier, assessment, assessmentCriterion, opportunity, bay, parkingRate,
+  mandate, vendor, targetOccupier, assessment, assessmentCriterion, bay, parkingRate,
 }

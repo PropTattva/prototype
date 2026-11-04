@@ -1,4 +1,4 @@
-// Mandate, campaign & GTM entities (PRD §5 "Mandate & GTM", epic E5) plus the v6 BD pipeline.
+// Mandate, campaign & GTM entities (PRD §5 "Mandate & GTM", epic E5).
 
 export type ExecMode = 'Internal (owner team)' | 'AA team' | 'External agency' | 'Hybrid'
 
@@ -97,30 +97,3 @@ export interface AssessmentCriterion {
   score: number | null
 }
 
-/** v6 BD pipeline: pre-mandate opportunities with a CRM ownership lock. */
-export interface Opportunity {
-  opp_id: string
-  account_name: string
-  /** user_id of the BD owner; null = released / unclaimed */
-  owner_user_id: string | null
-  /** extra users granted co-ownership through an access request */
-  co_owners: string[]
-  team: 'AA' | 'N8'
-  stage: 'Prospect' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Won' | 'Lost'
-  deal_type: 'New office' | 'Expansion' | 'Renewal' | 'Relocation'
-  /** mandate fee potential, ₹ lakh */
-  potential_lakh: number | null
-  probability: number | null
-  last_activity: string
-  notes: string | null
-}
-
-export interface AccessRequest {
-  request_id: string
-  opp_id: string
-  requester_id: string
-  status: 'Pending' | 'Approved' | 'Co-owned' | 'Declined'
-  created_at: string
-  /** No response by then → escalates to team leads */
-  escalate_at: string
-}

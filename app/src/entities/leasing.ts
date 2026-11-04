@@ -205,7 +205,7 @@ const renewal: EntityDef = {
   fields: [
     leaseField,
     { key: 'stage', label: 'Stage', type: 'enum', options: RENEWAL_STAGES, required: true, column: true },
-    { key: 'assignee', label: 'Owner (assignee)', type: 'ref', options: (d, ctx) => ctx.users.filter((u) => u.status === 'Active' && (!d.org_id || u.org_id === d.org_id || u.org_id === 'ORG-PT')).map((u) => ({ value: u.user_id, label: u.name })), column: true },
+    { key: 'assignee', label: 'Owner (assignee)', type: 'ref', options: (d, ctx) => ctx.users.filter((u) => u.status === 'Active' && (!d.org_id || u.org_id === d.org_id || u.role === 'AA')).map((u) => ({ value: u.user_id, label: u.name })), column: true },
     { key: 'target_date', label: 'Target date', type: 'date', column: true },
     { key: 'notes', label: 'Next steps', type: 'textarea', column: true },
   ],

@@ -3,6 +3,7 @@
 import { FEATURES, QUOTA_KEYS, ROLES_FOR_ORG_TYPE } from '../access/policy'
 import type { PlatformDb } from '../domain/platform'
 import { ASSET_ENTITIES } from './assets'
+import { CRM_ENTITIES } from './crm'
 import { isLive, orgName, orgOptions, orgTypeOf, plural, shortId } from './helpers'
 import { LEASING_ENTITIES } from './leasing'
 import { MANDATE_ENTITIES } from './mandates'
@@ -21,7 +22,7 @@ const organisation: EntityDef = {
   fields: [
     { key: 'org_id', label: 'Org ID', type: 'text', system: true, column: true },
     { key: 'name', label: 'Name', type: 'text', required: true, column: true },
-    { key: 'type', label: 'Type', type: 'enum', options: ['PropTattva', 'Owner', 'Occupier', 'Enabler'], required: true, column: true },
+    { key: 'type', label: 'Type', type: 'enum', options: ['PropTattva', 'Advisory', 'Owner', 'Occupier', 'Enabler'], required: true, column: true },
     {
       key: 'enabler_type',
       label: 'Enabler type',
@@ -170,7 +171,7 @@ const plan: EntityDef = {
   fields: [
     { key: 'plan_code', label: 'Plan code', type: 'text', required: true, createOnly: true, column: true, placeholder: 'OWNER_PLUS', help: 'Upper-case letters and underscores; cannot change later.' },
     { key: 'name', label: 'Name', type: 'text', required: true, column: true },
-    { key: 'applies_to', label: 'Applies to', type: 'enum', options: ['Owner', 'Occupier', 'Enabler'], required: true, column: true },
+    { key: 'applies_to', label: 'Applies to', type: 'enum', options: ['Owner', 'Occupier', 'Enabler', 'Advisory'], required: true, column: true },
     { key: 'default_seat_limit', label: 'Default seats', type: 'int', required: true, column: true },
     { key: 'price', label: 'Price (₹ / month)', type: 'money', column: true, help: 'Leave blank for custom pricing. Sample values — no billing in Alpha.' },
     {
@@ -252,7 +253,7 @@ const subscription: EntityDef = {
   },
 }
 
-export const REGISTRY = { organisation, user, invite, plan, subscription, ...ASSET_ENTITIES, ...LEASING_ENTITIES, ...MANDATE_ENTITIES } as Record<EntityKey, EntityDef>
+export const REGISTRY = { organisation, user, invite, plan, subscription, ...ASSET_ENTITIES, ...LEASING_ENTITIES, ...MANDATE_ENTITIES, ...CRM_ENTITIES } as Record<EntityKey, EntityDef>
 
 export const entityDef = (key: EntityKey) => REGISTRY[key]
 

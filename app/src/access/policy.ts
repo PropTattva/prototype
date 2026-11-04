@@ -6,7 +6,8 @@ export const ROLES: Role[] = ['Super Admin', 'AA', 'Owner/Developer', 'Occupier'
 
 /** Roles a user may hold, by the type of org they belong to (one role per user — EP-A-S04). */
 export const ROLES_FOR_ORG_TYPE: Record<OrgType, Role[]> = {
-  PropTattva: ['Super Admin', 'AA'],
+  PropTattva: ['Super Admin'],
+  Advisory: ['AA'],
   Owner: ['Owner/Developer'],
   Occupier: ['Occupier'],
   Enabler: ['Enabler'],
@@ -20,9 +21,8 @@ export type Action = 'C' | 'R' | 'U' | 'D'
  * mandated   — AA: records on buildings under an active mandate (§7.2 "*")
  * published  — occupiers / brokers: records on published buildings, public entities only
  * own-broker — broker log rows registered by the viewer's firm
- * own-user   — BD pipeline (CRM ownership lock): own + co-owned + unclaimed accounts
  */
-export type RowScope = 'all' | 'own-org' | 'own-scope' | 'mandated' | 'published' | 'own-broker' | 'own-user'
+export type RowScope = 'all' | 'own-org' | 'own-scope' | 'mandated' | 'published' | 'own-broker'
 export interface Grant {
   actions: Action[]
   scope: RowScope
@@ -32,7 +32,7 @@ export interface Grant {
 export type Capability =
   | 'organisations' | 'org_users' | 'plans' | 'subscriptions' | 'audit'
   | 'buildings' | 'leases' | 'invoices' | 'broker_log' | 'occupiers'
-  | 'mandates' | 'aa_only' | 'vendors' | 'bd'
+  | 'mandates' | 'aa_only' | 'vendors' | 'crm'
 
 const CRUD: Action[] = ['C', 'R', 'U', 'D']
 const CRU: Action[] = ['C', 'R', 'U']
@@ -126,10 +126,14 @@ export const CAPABILITIES: Record<Capability, Partial<Record<Role, Grant>>> = {
     AA: { actions: CRU, scope: 'all' },
     'Owner/Developer': { actions: R, scope: 'all' },
   },
-  // v6 BD pipeline with the CRM ownership lock: each AA/N8 user works their own accounts.
-  bd: {
+  // CRM for every persona: each org's accounts, contacts and meetings are shared inside the org and
+  // never visible to another customer org. Super Admin is the platform owner and manages every org's book.
+  crm: {
     'Super Admin': { actions: CRUD, scope: 'all' },
-    AA: { actions: CRUD, scope: 'own-user' },
+    AA: { actions: CRUD, scope: 'own-org' },
+    'Owner/Developer': { actions: CRUD, scope: 'own-org' },
+    Occupier: { actions: CRUD, scope: 'own-org' },
+    Enabler: { actions: CRUD, scope: 'own-org' },
   },
 }
 

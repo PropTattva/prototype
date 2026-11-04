@@ -98,7 +98,13 @@ function UserMenu() {
   }, [open])
 
   const me = session.actor
-  const groups = ['PropTattva', 'Owner', 'Occupier', 'Enabler'] as const
+  const groups: { label: string; match: (d: { user: { role: string }; org: { type: string } }) => boolean }[] = [
+    { label: 'Platform admin', match: (d) => d.user.role === 'Super Admin' },
+    { label: 'AA – Internal team', match: (d) => d.user.role === 'AA' },
+    { label: 'Owner', match: (d) => d.org.type === 'Owner' },
+    { label: 'Occupier', match: (d) => d.org.type === 'Occupier' },
+    { label: 'Direct', match: (d) => d.org.type === 'Enabler' },
+  ]
 
   return (
     <div className="relative" ref={ref}>
@@ -119,11 +125,11 @@ function UserMenu() {
           <div className="border-b border-line px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-ink-muted">Switch persona</div>
           <div className="max-h-[50vh] overflow-y-auto py-1">
             {groups.map((g) => {
-              const people = (directory ?? []).filter((d) => d.org.type === g && !d.blocker)
+              const people = (directory ?? []).filter((d) => g.match(d) && !d.blocker)
               if (!people.length) return null
               return (
-                <div key={g}>
-                  <div className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-gold-dark">{g === 'Enabler' ? 'Direct' : g}</div>
+                <div key={g.label}>
+                  <div className="px-4 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-gold-dark">{g.label}</div>
                   {people.map(({ user, org }) => (
                     <button
                       key={user.user_id}

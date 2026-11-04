@@ -15,7 +15,14 @@ const KINDS: { key: ActionKind | 'All'; label: string }[] = [
   { key: 'Rent', label: 'Overdue rent' },
   { key: 'Deposit', label: 'Deposits' },
   { key: 'Escalation', label: 'Escalations' },
+  { key: 'Follow-up', label: 'CRM follow-ups' },
+  { key: 'Billing', label: 'Billing' },
+  { key: 'Account', label: 'Accounts' },
+  { key: 'Data quality', label: 'Data quality' },
 ]
+
+/** Platform issues are states, not dated tasks — no due chip. */
+const PLATFORM_KINDS: ActionKind[] = ['Account', 'Billing', 'Data quality']
 
 const SEVERITY: Record<ActionSeverity, { dot: string; text: string; icon: string }> = {
   Critical: { dot: 'bg-crit', text: 'text-crit', icon: '!' },
@@ -23,7 +30,7 @@ const SEVERITY: Record<ActionSeverity, { dot: string; text: string; icon: string
   Info: { dot: 'bg-royal', text: 'text-royal', icon: 'i' },
 }
 
-/** Right-edge "Needs action" tab: every lease follow-up in the viewer's scope, most urgent first. */
+/** Right-edge "Needs action" tab: lease follow-ups in the viewer's scope and their CRM next actions, most urgent first. */
 export default function NeedsAction({ session, refreshKey }: { session: Session; refreshKey: string }) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<ActionKind | 'All'>('All')
@@ -32,7 +39,6 @@ export default function NeedsAction({ session, refreshKey }: { session: Session;
   if (!items.length) return null
   const critical = items.filter((i) => i.severity === 'Critical').length
   const shown = items.filter((i) => kind === 'All' || i.kind === kind)
-  const leases = new Set(items.map((i) => i.link.split('/')[1])).size
 
   return (
     <>
@@ -49,7 +55,7 @@ export default function NeedsAction({ session, refreshKey }: { session: Session;
         open={open}
         onClose={() => setOpen(false)}
         title="Needs action"
-        sub={`${items.length} actions across ${leases} leases · ${critical} critical`}
+        sub={`${items.length} actions · ${critical} critical`}
       >
         <div className="mb-4 flex flex-wrap gap-1.5">
           {KINDS.map((k) => {
@@ -100,9 +106,11 @@ function ActionRow({ a, go }: { a: ActionItem; go: (to: string) => void }) {
           <div className="mt-0.5 truncate pl-6 text-[11px] font-semibold text-royal">{a.context}</div>
           <p className="mt-1 pl-6 text-[12px] text-ink-soft">{a.detail}</p>
         </div>
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${n < 0 ? 'bg-crit/10 text-crit' : 'bg-hover text-ink-soft'}`} title={fmtDate(a.due)}>
-          {n < 0 ? `${-n}d overdue` : n === 0 ? 'Today' : `${n}d`}
-        </span>
+        {!PLATFORM_KINDS.includes(a.kind) && (
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${n < 0 ? 'bg-crit/10 text-crit' : 'bg-hover text-ink-soft'}`} title={fmtDate(a.due)}>
+            {n < 0 ? `${-n}d overdue` : n === 0 ? 'Today' : `${n}d`}
+          </span>
+        )}
       </div>
       <div className="mt-2 pl-6">
         <button onClick={() => go(a.link)} className="btn btn-primary">{a.cta} →</button>

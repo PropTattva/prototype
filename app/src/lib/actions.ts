@@ -1,11 +1,13 @@
-// Needs-action rules over the viewer's leases: renewals to start, expiries, breaks, escalations, deposits, overdue rent.
+// Needs-action rules over the viewer's leases (renewals to start, expiries, breaks, escalations, deposits, overdue rent)
+// and the CRM follow-ups they owe. The platform owner gets platform issues instead (lib/platformHealth).
+import type { CrmAccount, CrmActivity, CrmContact } from '../domain/crm'
 import type { Lease, LeaseRenewal, RentInvoice } from '../domain/leasing'
 import type { OptionCtx } from '../entities/types'
-import { addMonths, daysBetween } from './dates'
+import { addMonths, daysBetween, fmtDate } from './dates'
 import { fmtSft } from './format'
 
 export type ActionSeverity = 'Critical' | 'Warning' | 'Info'
-export type ActionKind = 'Renewal' | 'Expiry' | 'Break' | 'Escalation' | 'Deposit' | 'Rent'
+export type ActionKind = 'Renewal' | 'Expiry' | 'Break' | 'Escalation' | 'Deposit' | 'Rent' | 'Follow-up' | 'Account' | 'Billing' | 'Data quality'
 
 export interface ActionItem {
   id: string
@@ -23,7 +25,7 @@ export interface ActionItem {
 
 const RANK: Record<ActionSeverity, number> = { Critical: 0, Warning: 1, Info: 2 }
 // Within a severity, lease-lifecycle actions come before collections.
-const KIND_ORDER: ActionKind[] = ['Expiry', 'Renewal', 'Break', 'Rent', 'Deposit', 'Escalation']
+const KIND_ORDER: ActionKind[] = ['Billing', 'Account', 'Data quality', 'Expiry', 'Renewal', 'Break', 'Rent', 'Follow-up', 'Deposit', 'Escalation']
 const inr = (n: number) => (n >= 1e7 ? `₹${(n / 1e7).toFixed(1)} Cr` : `₹${(n / 1e5).toFixed(1)} lakh`)
 const YEARS: Record<string, number> = { Annual: 1, Biennial: 2, 'Every 3 years': 3 }
 
@@ -92,5 +94,32 @@ export function needsAction(ctx: OptionCtx, renewals: LeaseRenewal[], invoices: 
       add({ id: 'rent', kind: 'Rent', severity: daysTo(oldest) < -60 ? 'Critical' : 'Warning', title: `${inr(amount)} rent overdue`, detail: `${overdue.length} unpaid ${overdue.length === 1 ? 'invoice' : 'invoices'}, oldest ${-daysTo(oldest)} days past due.`, due: oldest, cta: 'View invoices', link: `leases/${l.lease_id}/invoices` })
     }
   }
-  return out.sort((a, b) => RANK[a.severity] - RANK[b.severity] || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.due.localeCompare(b.due))
+  return sortActions(out)
+}
+
+export const sortActions = (items: ActionItem[]) =>
+  [...items].sort((a, b) => RANK[a.severity] - RANK[b.severity] || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.due.localeCompare(b.due))
+
+/** CRM next actions that are overdue or due within a week. */
+export function crmActions(activities: CrmActivity[], accounts: CrmAccount[], contacts: CrmContact[], today: string): ActionItem[] {
+  const out: ActionItem[] = []
+  for (const a of activities) {
+    if (!a.next_action || !a.next_action_date || a.next_action_done) continue
+    const n = daysBetween(today, a.next_action_date)
+    if (n > 7) continue
+    const acc = accounts.find((x) => x.account_id === a.account_id)
+    const people = a.contact_ids.map((id) => contacts.find((c) => c.contact_id === id)).filter(Boolean).map((c) => `${c!.first_name} ${c!.last_name}`)
+    out.push({
+      id: `crm-${a.activity_id}`,
+      kind: 'Follow-up',
+      severity: n < 0 ? 'Critical' : n <= 2 ? 'Warning' : 'Info',
+      title: `${a.next_action} — ${acc?.name ?? 'account'}`,
+      context: [acc?.name, people.join(', ')].filter(Boolean).join(' · '),
+      detail: `From your ${a.purpose.toLowerCase()} on ${fmtDate(a.date)}${a.notes ? `: ${a.notes.length > 90 ? `${a.notes.slice(0, 90)}…` : a.notes}` : ''}`,
+      due: a.next_action_date,
+      cta: 'Open account',
+      link: `crm/accounts/${a.account_id}`,
+    })
+  }
+  return out
 }

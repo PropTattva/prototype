@@ -8,6 +8,8 @@ import type { Session } from './access/session'
 import type { EntityKey } from './entities/types'
 import { linkFor } from './lib/links'
 import AuditLog from './screens/admin/AuditLog'
+import DataHealth from './screens/admin/DataHealth'
+import OrgDetail from './screens/admin/OrgDetail'
 import Overview from './screens/admin/Overview'
 import ViewAs from './screens/admin/ViewAs'
 import Availability from './screens/assets/Availability'
@@ -29,7 +31,7 @@ import AssessmentDetail from './screens/mandates/AssessmentDetail'
 import Assessments from './screens/mandates/Assessments'
 import MandateDetail from './screens/mandates/MandateDetail'
 import Mandates from './screens/mandates/Mandates'
-import Pipeline from './screens/mandates/Pipeline'
+import Crm from './screens/crm/Crm'
 import Parking from './screens/Parking'
 import RevenueAtRisk from './screens/RevenueAtRisk'
 import Subscription from './screens/Subscription'
@@ -91,6 +93,9 @@ function Screen({ session }: { session: Session }) {
     if (!sub) page = <Overview />
     else if (sub === 'audit') page = <AuditLog />
     else if (sub === 'view-as') page = <ViewAs />
+    else if (sub === 'health') page = <DataHealth />
+    // An organisation opens its support page; the list and "new" stay on the generic entity page.
+    else if (sub === 'organisations' && more[0] && more[0] !== 'new') page = <OrgDetail key={more[0]} id={more[0]} />
     else if (ADMIN_ENTITIES[sub]) {
       const cfg = ADMIN_ENTITIES[sub]
       page = <EntityPage key={sub} entity={cfg.entity} basePath={`admin/${sub}`} rest={more} subtitle={cfg.subtitle} linkTo={linkFor(session)} />
@@ -149,8 +154,8 @@ function Screen({ session }: { session: Session }) {
       case 'assessments':
         page = rest[0] && rest[0] !== 'new' ? <AssessmentDetail key={rest[0]} id={rest[0]} /> : <Assessments rest={rest} />
         break
-      case 'pipeline':
-        page = <Pipeline rest={rest} />
+      case 'crm':
+        page = <Crm rest={rest} />
         break
       case 'parking':
         page = <Parking rest={rest} />

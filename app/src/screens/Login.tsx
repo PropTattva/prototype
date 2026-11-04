@@ -6,21 +6,28 @@ import PtMark from '../components/ui/PtMark'
 import { useToast } from '../components/ui/Toast'
 import { useSession } from '../state/SessionContext'
 
-const PERSONAS: { type: OrgType; letter: string; name: string; sub: string }[] = [
+type Persona = OrgType | 'AA' | 'Admin'
+
+const PERSONAS: { type: Persona; letter: string; name: string; sub: string }[] = [
   { type: 'Owner', letter: 'O', name: 'Owner', sub: 'You own one or more commercial buildings' },
   { type: 'Occupier', letter: 'C', name: 'Occupier', sub: 'Your company rents office space' },
   { type: 'Enabler', letter: 'D', name: 'Direct', sub: 'You are a broker, consultant, or fit-out partner' },
+  { type: 'AA', letter: 'A', name: 'AA – Internal team', sub: 'Asset Advantage: mandates, assessments and business development' },
 ]
+
+/** Which seeded users a persona lists: the AA team is its own org; platform admins are PropTattva's Super Admins. */
+const inPersona = (p: Persona, d: { org: { type: OrgType }; user: { role: string } }) =>
+  p === 'AA' ? d.org.type === 'Advisory' : p === 'Admin' ? d.user.role === 'Super Admin' : d.org.type === p
 
 /** v6 "Who are you?" login. Each persona leads to the seeded users of that org type. */
 export default function Login() {
   const { signInAs } = useSession()
   const toast = useToast()
-  const [persona, setPersona] = useState<OrgType | null>(null)
+  const [persona, setPersona] = useState<Persona | null>(null)
   const { data: directory } = useApi(listSignInDirectory, [])
 
-  const people = (directory ?? []).filter((d) => d.org.type === persona)
-  const label = persona === 'PropTattva' ? 'Internal team' : PERSONAS.find((p) => p.type === persona)?.name
+  const people = persona ? (directory ?? []).filter((d) => inPersona(persona, d)) : []
+  const label = persona === 'Admin' ? 'Platform admin' : PERSONAS.find((p) => p.type === persona)?.name
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-royal to-royal-dark p-4 sm:p-5">
@@ -91,7 +98,7 @@ export default function Login() {
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t border-line pt-[18px] text-center text-[11px] text-ink-muted">
           <span>Phase ALPHA pilot · Enterprise security from Day 1 ·</span>
-          <button className="font-semibold text-royal hover:underline" onClick={() => setPersona('PropTattva')}>Internal team login</button>
+          <button className="font-semibold text-royal hover:underline" onClick={() => setPersona('Admin')}>Platform admin login</button>
           <span>·</span>
           <button
             className="font-semibold text-royal hover:underline"

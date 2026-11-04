@@ -5,15 +5,19 @@ import { can, canSeeField, featureLabel, FEATURES, grantFor, type Action } from 
 import type { Session } from '../access/session'
 import type { Building } from '../domain/assets'
 import type { Lease } from '../domain/leasing'
-import type { AccessRequest, Mandate, Opportunity, PricingInputs, Swot } from '../domain/mandates'
+import type { CrmAccount, CrmActivity, CrmContact, PicklistKey, PicklistValue } from '../domain/crm'
+import type { Mandate, PricingInputs, Swot } from '../domain/mandates'
 import type { Bay, ParkingRate, SlotType } from '../domain/parking'
-import type { AuditEntry, Invite, PlatformDb, User } from '../domain/platform'
+import { INTERNAL_ORG_TYPES, type AuditEntry, type Invite, type Organisation, type PlatformDb, type Subscription, type SubscriptionPlan, type User } from '../domain/platform'
+import { orgPicklist } from '../entities/crm'
 import { REGISTRY, seatUsage } from '../entities/registry'
 import type { EntityDef, EntityKey, OptionCtx, Rec } from '../entities/types'
 import { ASSESSMENT_TEMPLATE, assessmentScore, gradeBand } from '../lib/assessment'
 import { addDays, addMonths, daysBetween, daysFromToday, quarterOf, todayIso } from '../lib/dates'
-import { needsAction as actionRules, type ActionItem } from '../lib/actions'
+import { crmActions, needsAction as actionRules, sortActions, type ActionItem } from '../lib/actions'
+import { ORG_HOME_CITY, defaultCity, picklistLabel } from '../lib/crm'
 import { marketNews, portfolioNews, type NewsItem } from '../lib/news'
+import { platformHealth, seatsOf, type HealthIssue } from '../lib/platformHealth'
 import { priceModel } from '../lib/pricing'
 import { suggestSwot } from '../lib/swot'
 import { readDb, resetDb, writeDb } from './store'
@@ -62,11 +66,15 @@ const COLLECTION: Record<EntityKey, keyof PlatformDb> = {
   targetOccupier: 'target_occupiers',
   assessment: 'assessments',
   assessmentCriterion: 'assessment_criteria',
-  opportunity: 'opportunities',
   bay: 'bays',
   parkingRate: 'parking_rates',
+  crmAccount: 'crm_accounts',
+  crmContact: 'crm_contacts',
+  crmActivity: 'crm_activities',
 }
 
+/** PropTattva and the AA team's org: internal staff, not customers. */
+const internalOrgIds = (db: PlatformDb) => new Set(db.organisations.filter((o) => INTERNAL_ORG_TYPES.includes(o.type)).map((o) => o.org_id))
 const rows = (db: PlatformDb, key: EntityKey) => db[COLLECTION[key]] as unknown as Rec[]
 const now = () => new Date().toISOString()
 const isLive = (s: { status: string }) => s.status === 'Active' || s.status === 'Trial'
@@ -221,8 +229,6 @@ function inRowScope(def: EntityDef, s: Session, rec: Rec, f: ScopeFacts) {
       return !!def.publicReadable && buildingsOf(def, rec, f).some((b) => f.published.has(b)) && (def.publicRowFilter?.(rec) ?? true)
     case 'own-broker':
       return rec.broker_org_id === s.org.org_id
-    case 'own-user':
-      return rec.owner_user_id == null || rec.owner_user_id === s.user.user_id || (rec.co_owners ?? []).includes(s.user.user_id) || isReleased(rec)
     default:
       return false
   }
@@ -290,7 +296,6 @@ function lockOwnership(def: EntityDef, s: Session, draft: Rec) {
   const scope = grantFor(def.capability, s.role)?.scope
   if (scope === 'own-org' && def.orgKey) draft[def.orgKey] = s.org.org_id
   if (scope === 'own-broker') draft.broker_org_id = s.org.org_id
-  if (scope === 'own-user') draft.owner_user_id = s.user.user_id
 }
 
 /** AA can read mandated buildings, but act only where the mandate is executed by AA or hybrid (E5-S02). */
@@ -298,12 +303,6 @@ function requireActable(def: EntityDef, s: Session, rec: Rec, f: ScopeFacts) {
   if (grantFor(def.capability, s.role)?.scope !== 'mandated') return
   if (!buildingsOf(def, rec, f).some((b) => f.mandatedWrite.has(b)))
     throw new ApiError('FORBIDDEN', 'Leasing on this building is executed by the owner or an external agency — AA has read-only access under this mandate.')
-}
-
-/** BD accounts with no activity for 120 days are released and can be claimed (v6 CRM lock). */
-const RELEASE_DAYS = 120
-function isReleased(o: Rec) {
-  return o.owner_user_id != null && o.last_activity && Date.now() - new Date(o.last_activity).getTime() > RELEASE_DAYS * 86_400_000
 }
 
 /** Every visible collection, scoped and projected for the viewer — ignores plan gating (lookups only). */
@@ -336,7 +335,7 @@ function scopedCtx(s: Session, db: PlatformDb): OptionCtx {
     mandates: visible('mandate', s, db, f) as OptionCtx['mandates'],
     vendors: visible('vendor', s, db, f) as OptionCtx['vendors'],
     directory: internal ? db.buildings.map((b) => ({ building_id: b.building_id, name: b.name, org_id: b.org_id, campus_id: b.campus_id })) : [],
-    users: s.role === 'Super Admin' ? db.users : db.users.filter((u) => u.org_id === s.org.org_id || (s.role === 'AA' && u.org_id === 'ORG-PT')),
+    users: s.role === 'Super Admin' ? db.users : db.users.filter((u) => u.org_id === s.org.org_id || (s.role === 'AA' && internalOrgIds(db).has(u.org_id))),
   }
 }
 
@@ -401,12 +400,25 @@ const auditable = (rec: Rec) => {
 
 /** Needs-action panel: lease follow-ups for the viewer's scope. Rent items only for roles that can read invoices. */
 export async function needsAction(s: Session): Promise<ActionItem[]> {
-  if (!can('leases', s.role, 'R')) return []
   const db = readDb()
-  const ctx = scopedCtx(s, db)
-  const ids = new Set(ctx.leases.map((l) => l.lease_id))
-  const invoices = can('invoices', s.role, 'R') ? db.rent_invoices.filter((i) => ids.has(i.lease_id)) : []
-  return actionRules(ctx, db.renewals.filter((r) => ids.has(r.lease_id)), invoices, todayIso())
+  const out: ActionItem[] = []
+  // Platform owner: account, billing and critical data issues across every org — not each owner's lease to-dos.
+  if (s.role === 'Super Admin') {
+    for (const i of platformHealth(db, todayIso()))
+      if (i.severity !== 'Info' && (i.area !== 'Data' || i.severity === 'Critical'))
+        out.push({ id: i.id, kind: i.area === 'Data' ? 'Data quality' : i.area, severity: i.severity, title: i.check, context: i.label, detail: i.detail, due: todayIso(), cta: i.cta, link: i.link })
+  } else if (can('leases', s.role, 'R')) {
+    const ctx = scopedCtx(s, db)
+    const ids = new Set(ctx.leases.map((l) => l.lease_id))
+    const invoices = can('invoices', s.role, 'R') ? db.rent_invoices.filter((i) => ids.has(i.lease_id)) : []
+    out.push(...actionRules(ctx, db.renewals.filter((r) => ids.has(r.lease_id)), invoices, todayIso()))
+  }
+  // CRM follow-ups the viewer owes (they were the primary attendee).
+  if (can('crm', s.role, 'R')) {
+    const mine = db.crm_activities.filter((a) => a.org_id === s.org.org_id && a.primary_attendee_id === s.user.user_id)
+    out.push(...crmActions(mine, db.crm_accounts, db.crm_contacts, todayIso()))
+  }
+  return sortActions(out)
 }
 
 /** Dashboard news feed: lease events from the viewer's scope, newest first, plus sample market headlines. */
@@ -445,12 +457,9 @@ export async function get(key: EntityKey, id: string, s: Session): Promise<Rec> 
   return project(def, s, rec, f)
 }
 
-export async function create(key: EntityKey, input: Rec, s: Session): Promise<Rec> {
+/** Everything create does before saving: defaults, ownership, derived values, scope and validation. */
+function prepareCreate(key: EntityKey, input: Rec, s: Session, db: PlatformDb): Rec {
   const def = REGISTRY[key]
-  requireWritable(s)
-  requireGrant(def, s, 'C')
-  requireFeature(def, s)
-  const db = readDb()
   const draft: Rec = { ...input }
   // Every field exists on a stored record (null when empty): a missing key means "hidden", never "unset".
   for (const f of def.fields) {
@@ -476,6 +485,16 @@ export async function create(key: EntityKey, input: Rec, s: Session): Promise<Re
     throw new ApiError('FORBIDDEN', `You can only add ${def.plural.toLowerCase()} within your own scope.`)
   requireActable(def, s, draft, scopeFacts(db))
   validate(def, db, draft, 'create', null, s)
+  return draft
+}
+
+export async function create(key: EntityKey, input: Rec, s: Session): Promise<Rec> {
+  const def = REGISTRY[key]
+  requireWritable(s)
+  requireGrant(def, s, 'C')
+  requireFeature(def, s)
+  const db = readDb()
+  const draft = prepareCreate(key, input, s, db)
 
   if ((key === 'user' && draft.status !== 'Disabled') || key === 'invite') requireSeat(db, draft.org_id)
   if (key === 'building') {
@@ -887,7 +906,8 @@ export async function listAudit(s: Session): Promise<AuditEntry[]> {
   const grant = grantFor('audit', s.role)
   if (!grant) throw new ApiError('FORBIDDEN', `${s.role} cannot view the audit log.`)
   const db = readDb()
-  const internal = new Set(db.users.filter((u) => u.org_id === 'ORG-PT').map((u) => u.user_id))
+  const orgs = internalOrgIds(db)
+  const internal = new Set(db.users.filter((u) => orgs.has(u.org_id)).map((u) => u.user_id))
   const entries = grant.scope === 'all' ? db.audit_log : db.audit_log.filter((e) => internal.has(e.user_id))
   return [...entries].sort((a, b) => b.timestamp.localeCompare(a.timestamp))
 }
@@ -1162,123 +1182,200 @@ export async function completeAssessment(assessmentId: string, s: Session) {
   return { score, grade }
 }
 
-// ---------------------------------------------------------------- BD pipeline with CRM ownership lock (v6)
+// ---------------------------------------------------------------- CRM (all personas)
 
-const norm = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ')
-
-export interface LockedAccount {
-  opp_id: string
-  account_name: string
-  owner: string
-  team: string
-  last_activity: string
-  stage: string
-  my_request: AccessRequest['status'] | null
+export interface CrmBook {
+  accounts: CrmAccount[]
+  contacts: CrmContact[]
+  activities: CrmActivity[]
+  /** Orgs in this book: the viewer's own, or every org for the platform owner's "All organisations" view */
+  orgs: { org_id: string; name: string }[]
+  /** Active users of those orgs: account owners and meeting attendees */
+  team: { user_id: string; name: string; org_id: string }[]
+  /** Each org keeps its own dropdowns */
+  picklists: Record<string, Record<PicklistKey, PicklistValue[]>>
+  /** Prefill for a new meeting's city */
+  homeCity: string
 }
 
-/** Accounts owned by other BD people: only name, owner and last activity are shown (details stay locked). */
-export async function lockedAccounts(s: Session): Promise<LockedAccount[]> {
-  requireGrant(REGISTRY.opportunity, s, 'R')
+const PICKLIST_KEYS: PicklistKey[] = ['record_type', 'relationship_type', 'meeting_medium', 'meeting_purpose', 'next_action']
+
+/** Which org's CRM a call acts on: always the viewer's own, except Super Admin who may name any org. */
+function crmOrg(s: Session, orgId?: string | null) {
+  if (!orgId || orgId === s.org.org_id) return s.org.org_id
+  if (s.role !== 'Super Admin') throw new ApiError('FORBIDDEN', 'You can only manage your own organisation’s CRM.')
+  if (!readDb().organisations.some((o) => o.org_id === orgId)) throw new ApiError('NOT_FOUND', 'Organisation not found.')
+  return orgId
+}
+
+/**
+ * The CRM book in one call — screens filter it by account, contact or period.
+ * Everyone gets their own org's book; Super Admin (platform owner) can ask for any org, or 'all'.
+ */
+export async function crmBook(s: Session, scope: string | 'all' = s.org.org_id): Promise<CrmBook> {
+  requireGrant(REGISTRY.crmAccount, s, 'R')
   const db = readDb()
-  const names = new Map(db.users.map((u) => [u.user_id, u.name]))
-  return db.opportunities
-    .filter((o) => o.owner_user_id && o.owner_user_id !== s.user.user_id && !o.co_owners.includes(s.user.user_id) && !isReleased(o as unknown as Rec))
-    .map((o) => ({
-      opp_id: o.opp_id,
-      account_name: o.account_name,
-      owner: names.get(o.owner_user_id!) ?? 'Another BD owner',
-      team: o.team,
-      last_activity: o.last_activity,
-      stage: o.stage,
-      my_request: db.access_requests.filter((r) => r.opp_id === o.opp_id && r.requester_id === s.user.user_id).at(-1)?.status ?? null,
-    }))
-}
-
-/** Ownership check on save (v6 "Save & Check Ownership"). */
-export async function checkAccount(name: string, s: Session): Promise<{ status: 'free' | 'mine' | 'locked' | 'released'; opp: Opportunity | null; owner: string | null }> {
-  requireGrant(REGISTRY.opportunity, s, 'R')
-  const db = readDb()
-  const o = db.opportunities.find((x) => norm(x.account_name) === norm(name) && x.stage !== 'Lost')
-  if (!o) return { status: 'free', opp: null, owner: null }
-  const owner = db.users.find((u) => u.user_id === o.owner_user_id)?.name ?? null
-  if (!o.owner_user_id || isReleased(o as unknown as Rec)) return { status: 'released', opp: o, owner }
-  if (o.owner_user_id === s.user.user_id || o.co_owners.includes(s.user.user_id)) return { status: 'mine', opp: o, owner }
-  return { status: 'locked', opp: { ...o, notes: null, potential_lakh: null, probability: null }, owner }
-}
-
-export async function createOpportunity(input: Rec, s: Session) {
-  const check = await checkAccount(String(input.account_name ?? ''), s)
-  if (check.status === 'locked') throw new ApiError('CONFLICT', `LOCKED:${check.opp!.opp_id}`)
-  if (check.status === 'mine') throw new ApiError('CONFLICT', `${input.account_name} is already in your pipeline.`)
-  if (check.status === 'released') throw new ApiError('CONFLICT', `RELEASED:${check.opp!.opp_id}`)
-  return create('opportunity', input, s)
-}
-
-export async function claimOpportunity(oppId: string, s: Session) {
-  requireWritable(s)
-  requireGrant(REGISTRY.opportunity, s, 'U')
-  const o = readDb().opportunities.find((x) => x.opp_id === oppId)
-  if (!o) throw new ApiError('NOT_FOUND', 'Opportunity not found.')
-  if (o.owner_user_id && !isReleased(o as unknown as Rec)) throw new ApiError('CONFLICT', 'This account is still owned — request access instead.')
-  writeDb((d) => {
-    const x = d.opportunities.find((y) => y.opp_id === oppId)!
-    const before = { owner_user_id: x.owner_user_id }
-    Object.assign(x, { owner_user_id: s.user.user_id, co_owners: [], last_activity: now() })
-    d.audit_log.push(audit(s.actor, null, 'Opportunity', oppId, x.account_name, 'Update', before, { owner_user_id: s.user.user_id }))
-  })
-}
-
-export async function requestAccess(oppId: string, s: Session) {
-  requireWritable(s)
-  requireGrant(REGISTRY.opportunity, s, 'R')
-  const db = readDb()
-  const o = db.opportunities.find((x) => x.opp_id === oppId)
-  if (!o) throw new ApiError('NOT_FOUND', 'Opportunity not found.')
-  if (db.access_requests.some((r) => r.opp_id === oppId && r.requester_id === s.user.user_id && r.status === 'Pending'))
-    throw new ApiError('CONFLICT', 'You already have a pending request for this account.')
-  const req: AccessRequest = { request_id: `ACR-${crypto.randomUUID().slice(0, 6).toUpperCase()}`, opp_id: oppId, requester_id: s.user.user_id, status: 'Pending', created_at: now(), escalate_at: new Date(Date.now() + 48 * 3_600_000).toISOString() }
-  writeDb((d) => {
-    d.access_requests.push(req)
-    d.audit_log.push(audit(s.actor, null, 'AccessRequest', req.request_id, `Access to ${o.account_name}`, 'Create', null, req as unknown as Rec))
-  })
-  return req
-}
-
-/** Requests waiting on me (accounts I own) and requests I have made. */
-export async function accessRequests(s: Session) {
-  requireGrant(REGISTRY.opportunity, s, 'R')
-  const db = readDb()
-  const names = new Map(db.users.map((u) => [u.user_id, u.name]))
-  const mine = new Set(db.opportunities.filter((o) => o.owner_user_id === s.user.user_id).map((o) => o.opp_id))
-  const enrich = (r: AccessRequest) => ({ ...r, account: db.opportunities.find((o) => o.opp_id === r.opp_id)?.account_name ?? '', requester: names.get(r.requester_id) ?? r.requester_id, overdue: r.status === 'Pending' && r.escalate_at < now() })
+  const orgIds = scope === 'all' && s.role === 'Super Admin' ? db.organisations.map((o) => o.org_id) : [crmOrg(s, scope)]
+  const inScope = new Set(orgIds)
+  const activities = db.crm_activities.filter((a) => inScope.has(a.org_id))
+  const home = orgIds.length === 1 ? orgIds[0] : s.org.org_id
   return {
-    incoming: db.access_requests.filter((r) => mine.has(r.opp_id) || s.role === 'Super Admin').map(enrich),
-    outgoing: db.access_requests.filter((r) => r.requester_id === s.user.user_id).map(enrich),
+    accounts: db.crm_accounts.filter((a) => inScope.has(a.org_id)),
+    contacts: db.crm_contacts.filter((c) => inScope.has(c.org_id)),
+    activities,
+    orgs: db.organisations.filter((o) => inScope.has(o.org_id)).map((o) => ({ org_id: o.org_id, name: o.name })),
+    team: db.users.filter((u) => inScope.has(u.org_id) && u.status === 'Active').map((u) => ({ user_id: u.user_id, name: u.name, org_id: u.org_id })),
+    picklists: Object.fromEntries(orgIds.map((o) => [o, Object.fromEntries(PICKLIST_KEYS.map((k) => [k, orgPicklist(db.crm_picklists, o, k)]))])) as CrmBook['picklists'],
+    homeCity: defaultCity(activities.filter((a) => a.org_id === home), s.user.user_id, ORG_HOME_CITY[home] ?? 'Bengaluru'),
   }
 }
 
-/** Owner answers within 48 h: hand over, add as co-owner, or decline. */
-export async function decideAccess(requestId: string, decision: 'Approved' | 'Co-owned' | 'Declined', s: Session) {
+export interface LogMeetingInput {
+  /** An existing account, or the fields for a new one */
+  account: { account_id: string } | { new: Rec }
+  /** Existing contacts and/or new people met */
+  contacts: ({ contact_id: string } | { new: Rec })[]
+  activity: Rec
+  /** Mark the account's earlier open next actions as done */
+  closePrevious: boolean
+  /** Super Admin only: the org whose CRM this goes into (default: the viewer's own) */
+  org_id?: string
+}
+
+/**
+ * Log a meeting in one save: creates the firm and new contacts if needed, then the meeting.
+ * Everything is validated before anything is written; field errors come back prefixed
+ * (account.name, contact0.email, activity.medium) so the form can point at the right field.
+ */
+export async function logMeeting(input: LogMeetingInput, s: Session) {
   requireWritable(s)
-  const db = readDb()
-  const r = db.access_requests.find((x) => x.request_id === requestId)
-  if (!r) throw new ApiError('NOT_FOUND', 'Request not found.')
-  const o = db.opportunities.find((x) => x.opp_id === r.opp_id)!
-  if (s.role !== 'Super Admin' && o.owner_user_id !== s.user.user_id) throw new ApiError('FORBIDDEN', 'Only the account owner can answer this request.')
-  if (r.status !== 'Pending') throw new ApiError('CONFLICT', `Already ${r.status.toLowerCase()}.`)
+  requireGrant(REGISTRY.crmActivity, s, 'C')
+  const db = structuredClone(readDb())
+  const me = s.user.user_id
+  const org = crmOrg(s, input.org_id)
+  const stage = (prefix: string, key: EntityKey, rec: Rec) => {
+    try {
+      const draft = prepareCreate(key, { ...rec, org_id: org, created_by: me }, s, db)
+      rows(db, key).push(draft)
+      return draft
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'VALIDATION')
+        throw new ApiError('VALIDATION', e.message, Object.fromEntries(Object.entries(e.fieldErrors).map(([k, v]) => [`${prefix}.${k}`, v])))
+      throw e
+    }
+  }
+
+  const created: { key: EntityKey; rec: Rec }[] = []
+  let accountId: string
+  if ('new' in input.account) {
+    // The platform owner logging into another org's book makes that org's first user the owner by default.
+    const owner = db.users.some((u) => u.user_id === me && u.org_id === org) ? me : db.users.find((u) => u.org_id === org && u.status === 'Active')?.user_id
+    const acc = stage('account', 'crmAccount', { owner_user_id: owner, stage: null, ...input.account.new })
+    created.push({ key: 'crmAccount', rec: acc })
+    accountId = acc.account_id
+  } else accountId = input.account.account_id
+
+  const contactIds = input.contacts.map((c, i) => {
+    if (!('new' in c)) return c.contact_id
+    const con = stage(`contact${i}`, 'crmContact', { ...c.new, account_id: accountId })
+    created.push({ key: 'crmContact', rec: con })
+    return con.contact_id as string
+  })
+  if (!contactIds.length) throw new ApiError('VALIDATION', 'Add the person you met.', { 'activity.contact_ids': 'Add at least one person met.' })
+  const mtg = stage('activity', 'crmActivity', { ...input.activity, account_id: accountId, contact_ids: [...new Set(contactIds)] })
+  created.push({ key: 'crmActivity', rec: mtg })
+
   writeDb((d) => {
-    const req = d.access_requests.find((x) => x.request_id === requestId)!
-    const opp = d.opportunities.find((x) => x.opp_id === r.opp_id)!
-    req.status = decision
-    const before = { owner_user_id: opp.owner_user_id, co_owners: opp.co_owners }
-    if (decision === 'Approved') Object.assign(opp, { owner_user_id: r.requester_id, co_owners: opp.owner_user_id ? [opp.owner_user_id] : [] })
-    if (decision === 'Co-owned') opp.co_owners = [...new Set([...opp.co_owners, r.requester_id])]
-    d.audit_log.push(audit(s.actor, null, 'Opportunity', opp.opp_id, opp.account_name, 'Update', before, { decision, owner_user_id: opp.owner_user_id, co_owners: opp.co_owners }))
+    if (input.closePrevious)
+      for (const a of d.crm_activities) if (a.account_id === accountId && a.next_action && !a.next_action_done) a.next_action_done = true
+    for (const { key, rec } of created) {
+      rows(d, key).push(rec)
+      const def = REGISTRY[key]
+      d.audit_log.push(audit(s.actor, rec.org_id, def.name, rec[def.idKey], def.title(rec, scopedCtx(s, d)), 'Create', null, rec))
+    }
+  })
+  return { activity: mtg as CrmActivity, account_id: accountId, created: created.map((c) => c.key) }
+}
+
+const PIPELINE_FIELDS = ['stage', 'deal_type', 'potential_lakh', 'probability', 'owner_user_id']
+
+/** Account edits; only the account owner can move its pipeline stage or hand it to a colleague. */
+export async function updateCrmAccount(id: string, patch: Rec, s: Session) {
+  const acc = readDb().crm_accounts.find((a) => a.account_id === id && (a.org_id === s.org.org_id || s.role === 'Super Admin'))
+  if (!acc) throw new ApiError('NOT_FOUND', 'Account not found.')
+  const touchesPipeline = PIPELINE_FIELDS.some((k) => k in patch && patch[k] !== (acc as unknown as Rec)[k])
+  if (touchesPipeline && acc.owner_user_id !== s.user.user_id && s.role !== 'Super Admin') {
+    const owner = readDb().users.find((u) => u.user_id === acc.owner_user_id)?.name ?? 'the account owner'
+    throw new ApiError('FORBIDDEN', `Only ${owner} (account owner) can change the pipeline stage or reassign ${acc.name}.`)
+  }
+  return update('crmAccount', id, patch, s)
+}
+
+function requirePicklistEdit(s: Session) {
+  requireWritable(s)
+  requireGrant(REGISTRY.crmActivity, s, 'C')
+}
+
+function savePicklist(s: Session, org: string, key: PicklistKey, values: PicklistValue[], label: string, before: Rec | null, after: Rec) {
+  writeDb((d) => {
+    const i = d.crm_picklists.findIndex((l) => l.org_id === org && l.list === key)
+    if (i >= 0) d.crm_picklists[i].values = values
+    else d.crm_picklists.push({ org_id: org, list: key, values })
+    d.audit_log.push(audit(s.actor, org, 'CrmPicklist', key, label, 'Update', before, after))
   })
 }
 
-export async function logActivity(oppId: string, s: Session) {
-  return update('opportunity', oppId, { notes: readDb().opportunities.find((o) => o.opp_id === oppId)?.notes ?? null }, s)
+/** Add a dropdown value for the viewer's org (re-activates a retired one with the same name). */
+export async function addPicklistValue(key: PicklistKey, value: string, s: Session, orgId?: string) {
+  requirePicklistEdit(s)
+  const org = crmOrg(s, orgId)
+  const v = value.trim().replace(/\s+/g, ' ')
+  if (!v) throw new ApiError('VALIDATION', 'Enter a value.')
+  if (v.length > 40) throw new ApiError('VALIDATION', 'Keep values under 40 characters.')
+  const values = orgPicklist(readDb().crm_picklists, org, key).map((x) => ({ ...x }))
+  const existing = values.find((x) => x.value.toLowerCase() === v.toLowerCase())
+  if (existing?.active) throw new ApiError('CONFLICT', `${existing.value} is already in ${picklistLabel(key)}.`)
+  if (existing) existing.active = true
+  else values.push({ value: v, active: true })
+  savePicklist(s, org, key, values, picklistLabel(key), null, { added: existing?.value ?? v })
+  return existing?.value ?? v
+}
+
+/** Rename a value everywhere it is used in the org, so reports stay consistent. */
+export async function renamePicklistValue(key: PicklistKey, from: string, to: string, s: Session, orgId?: string) {
+  requirePicklistEdit(s)
+  const org = crmOrg(s, orgId)
+  const v = to.trim().replace(/\s+/g, ' ')
+  if (!v) throw new ApiError('VALIDATION', 'Enter a value.')
+  const values = orgPicklist(readDb().crm_picklists, org, key).map((x) => ({ ...x }))
+  if (values.some((x) => x.value.toLowerCase() === v.toLowerCase() && x.value !== from)) throw new ApiError('CONFLICT', `${v} already exists.`)
+  const hit = values.find((x) => x.value === from)
+  if (!hit) throw new ApiError('NOT_FOUND', `${from} not found.`)
+  hit.value = v
+  savePicklist(s, org, key, values, picklistLabel(key), { value: from }, { value: v })
+  const fields: Record<PicklistKey, [keyof PlatformDb, string][]> = {
+    record_type: [['crm_accounts', 'record_type'], ['crm_activities', 'record_type']],
+    relationship_type: [['crm_accounts', 'relationship_type']],
+    meeting_medium: [['crm_activities', 'medium']],
+    meeting_purpose: [['crm_activities', 'purpose']],
+    next_action: [['crm_activities', 'next_action']],
+  }
+  writeDb((d) => {
+    for (const [col, field] of fields[key])
+      for (const r of d[col] as unknown as Rec[]) if (r.org_id === org && r[field] === from) r[field] = v
+  })
+}
+
+/** Retire (hide from new entries) or restore a value. At least one value must stay active. */
+export async function setPicklistValueActive(key: PicklistKey, value: string, active: boolean, s: Session, orgId?: string) {
+  requirePicklistEdit(s)
+  const org = crmOrg(s, orgId)
+  const values = orgPicklist(readDb().crm_picklists, org, key).map((x) => ({ ...x }))
+  const hit = values.find((x) => x.value === value)
+  if (!hit) throw new ApiError('NOT_FOUND', `${value} not found.`)
+  if (!active && values.filter((x) => x.active).length <= 1) throw new ApiError('CONFLICT', `${picklistLabel(key)} needs at least one value.`)
+  hit.active = active
+  savePicklist(s, org, key, values, picklistLabel(key), { value, active: !active }, { value, active })
 }
 
 // ---------------------------------------------------------------- parking (E6)
@@ -1376,3 +1473,84 @@ export async function auditExport(entity: string, label: string, s: Session) {
 }
 
 export const daysUntil = (iso: string) => daysBetween(todayIso(), iso)
+
+// ---------------------------------------------------------------- platform owner: manage & support
+
+function requireSuperAdmin(s: Session) {
+  if (s.role !== 'Super Admin') throw new ApiError('FORBIDDEN', 'Only the platform admin can see this.')
+}
+
+/** Account, billing and data-quality issues across every org. */
+export async function platformIssues(s: Session): Promise<HealthIssue[]> {
+  requireSuperAdmin(s)
+  return platformHealth(readDb(), todayIso())
+}
+
+export interface OrgSummary {
+  org: Organisation
+  plan: SubscriptionPlan | null
+  subscription: Subscription | null
+  seats: { used: number; limit: number | null }
+  users: { active: number; total: number; lastLogin: string | null; active30: number }
+  /** What the org has put on the platform */
+  footprint: { buildings: number; area: number; leases: number; documents: number; crmAccounts: number; meetings: number; mandates: number }
+  issues: { critical: number; warning: number; info: number }
+}
+
+function summarise(db: PlatformDb, o: Organisation, issues: HealthIssue[]): OrgSummary {
+  const { used, limit, sub } = seatsOf(db, o.org_id)
+  const users = db.users.filter((u) => u.org_id === o.org_id)
+  const logins = users.map((u) => u.last_login).filter((x): x is string => !!x).sort()
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  const mine = issues.filter((i) => i.org_id === o.org_id)
+  const buildings = db.buildings.filter((b) => b.org_id === o.org_id)
+  return {
+    org: o,
+    plan: sub ? db.plans.find((p) => p.plan_code === sub.plan_code) ?? null : null,
+    subscription: sub,
+    seats: { used, limit },
+    users: { active: users.filter((u) => u.status === 'Active').length, total: users.length, lastLogin: logins.at(-1) ?? null, active30: users.filter((u) => u.last_login && u.last_login >= since).length },
+    footprint: {
+      buildings: buildings.length,
+      area: buildings.reduce((s, b) => s + (b.total_area ?? 0), 0),
+      leases: db.leases.filter((l) => l.org_id === o.org_id && l.status === 'Active').length,
+      documents: db.documents.filter((d) => d.org_id === o.org_id).length,
+      crmAccounts: db.crm_accounts.filter((a) => a.org_id === o.org_id).length,
+      meetings: db.crm_activities.filter((a) => a.org_id === o.org_id).length,
+      mandates: db.mandates.filter((m) => m.org_id === o.org_id).length,
+    },
+    issues: { critical: mine.filter((i) => i.severity === 'Critical').length, warning: mine.filter((i) => i.severity === 'Warning').length, info: mine.filter((i) => i.severity === 'Info').length },
+  }
+}
+
+/** Platform dashboard: every org at a glance, the issues to act on, and recent activity. */
+export async function adminOverview(s: Session) {
+  requireSuperAdmin(s)
+  const db = readDb()
+  const issues = platformHealth(db, todayIso())
+  return {
+    orgs: db.organisations.map((o) => summarise(db, o, issues)),
+    issues,
+    audit: [...db.audit_log].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 10),
+    names: Object.fromEntries(db.users.map((u) => [u.user_id, u.name])) as Record<string, string>,
+  }
+}
+
+/** Support page for one org: people, plan, footprint, issues and its audit trail. */
+export async function orgSupport(orgId: string, s: Session) {
+  requireSuperAdmin(s)
+  const db = readDb()
+  const org = db.organisations.find((o) => o.org_id === orgId)
+  if (!org) throw new ApiError('NOT_FOUND', 'Organisation not found.')
+  const issues = platformHealth(db, todayIso())
+  return {
+    summary: summarise(db, org, issues),
+    users: db.users.filter((u) => u.org_id === orgId),
+    invites: db.invites.filter((i) => i.org_id === orgId),
+    subscriptions: db.subscriptions.filter((x) => x.org_id === orgId),
+    plans: db.plans,
+    issues: issues.filter((i) => i.org_id === orgId),
+    audit: db.audit_log.filter((e) => e.org_id === orgId).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 25),
+    names: Object.fromEntries(db.users.map((u) => [u.user_id, u.name])) as Record<string, string>,
+  }
+}

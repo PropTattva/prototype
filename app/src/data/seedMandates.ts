@@ -1,8 +1,8 @@
-// Phase 4 seed: mandates, vendors, assessments, target lists, the v6 BD pipeline, and parking.
+// Phase 4 seed: mandates, vendors, assessments, target lists and parking.
 // Built on top of the asset seed so bays, mandates and assessments attach to real buildings and leases.
 // All names here are fictional SAMPLE data (the v6 demo's real brand names are not reused on the public site).
 import type { createAssetSeed } from './seedAssets'
-import type { AccessRequest, AssessmentCriterion, BuildingAssessment, Mandate, Opportunity, PricingInputs, TargetOccupier, Vendor } from '../domain/mandates'
+import type { AssessmentCriterion, BuildingAssessment, Mandate, PricingInputs, TargetOccupier, Vendor } from '../domain/mandates'
 import type { Bay, ParkingRate } from '../domain/parking'
 import { ASSESSMENT_TEMPLATE, assessmentScore, gradeBand } from '../lib/assessment'
 import { addDays, addMonths, todayIso } from '../lib/dates'
@@ -134,27 +134,6 @@ export function createMandateSeed(a: Assets) {
     .filter(([n]) => occ(n))
     .map(([n, status, source, notes], i) => ({ list_id: `TGT-${i + 1}`, org_id: e1.org_id, building_id: e1.building_id, mandate_id: e1.mandate_id, occupier_ref: occ(n)!, status, source, notes }))
 
-  // ---------------------------------------------------------------- v6 BD pipeline (fictional accounts)
-  const o = (id: string, account: string, owner: string | null, team: Opportunity['team'], stage: Opportunity['stage'], deal: Opportunity['deal_type'], lakh: number, prob: number | null, days: number, notes: string): Opportunity => ({
-    opp_id: id, account_name: account, owner_user_id: owner, co_owners: [], team, stage, deal_type: deal, potential_lakh: lakh, probability: prob, last_activity: iso(-days), notes,
-  })
-  const opportunities: Opportunity[] = [
-    o('OPP-01', 'Kestrel Retail Tech', 'U-AA-1', 'N8', 'Prospect', 'Relocation', 35, 20, 3, 'HQ relocation, 120k sq ft'),
-    o('OPP-02', 'Northwind Analytics', 'U-AA-1', 'N8', 'Prospect', 'Expansion', 50, 25, 9, 'Bengaluru expansion'),
-    o('OPP-03', 'Lumen Design Studio', 'U-AA-1', 'N8', 'Prospect', 'New office', 28, 15, 14, 'Office consolidation'),
-    o('OPP-04', 'Bluepeak Bank GCC', 'U-AA-1', 'N8', 'Qualified', 'Expansion', 45, 50, 2, 'GCC expansion — hot'),
-    o('OPP-05', 'Tideway Energy Trading', 'U-AA-1', 'N8', 'Qualified', 'New office', 32, 40, 6, 'Two-city setup'),
-    o('OPP-06', 'Sterling Harbour Bank', 'U-AA-1', 'N8', 'Proposal', 'New office', 30, 85, 1, 'Bengaluru GCC — proposal sent'),
-    o('OPP-07', 'Acme GCC India', 'U-AA-1', 'N8', 'Won', 'Expansion', 65, 100, 20, '4-city portfolio — signed'),
-    o('OPP-08', 'Orion Search India', 'U-AA-2', 'AA', 'Proposal', 'Expansion', 90, 60, 4, 'Large campus requirement'),
-    o('OPP-09', 'Helix Pharma GCC', 'U-AA-2', 'AA', 'Negotiation', 'Relocation', 55, 70, 2, 'Negotiating fit-out contribution'),
-    o('OPP-10', 'Vantage Mobility', 'U-AA-2', 'AA', 'Qualified', 'New office', 25, 35, 15, 'EV R&D centre'),
-    o('OPP-11', 'Quill Learning', null, 'AA', 'Prospect', 'Renewal', 18, null, 125, 'Released after 120 days of inactivity'),
-  ]
-  const access_requests: AccessRequest[] = [
-    { request_id: 'ACR-1', opp_id: 'OPP-04', requester_id: 'U-AA-2', status: 'Pending', created_at: iso(-1), escalate_at: iso(1) },
-  ]
-
   // ---------------------------------------------------------------- parking: bays, allocation, rates
   const bays: Bay[] = []
   const parking_rates: ParkingRate[] = []
@@ -202,5 +181,5 @@ export function createMandateSeed(a: Assets) {
     }
   }
 
-  return { mandates, vendors, target_occupiers, assessments, assessment_criteria, opportunities, access_requests, bays, parking_rates }
+  return { mandates, vendors, target_occupiers, assessments, assessment_criteria, bays, parking_rates }
 }

@@ -3,6 +3,7 @@
 import type { AuditEntry, Invite, Organisation, PlatformDb, Subscription, SubscriptionPlan, User } from '../domain/platform'
 import { createAssetSeed } from './seedAssets'
 import { createMandateSeed } from './seedMandates'
+import { createCrmSeed } from './seedCrm'
 
 const DAY = 86_400_000
 const iso = (offsetDays: number, base = Date.now()) => new Date(base + offsetDays * DAY).toISOString()
@@ -21,11 +22,15 @@ const plans: SubscriptionPlan[] = [
   { plan_code: 'OCCUPIER_FREE', name: 'Occupier Free', applies_to: 'Occupier', default_seat_limit: 2, feature_flags: OCCUPIER_FREE, quotas: { comparables: 10 }, price: 0, status: 'Active' },
   { plan_code: 'OCCUPIER_PRO', name: 'Occupier Pro', applies_to: 'Occupier', default_seat_limit: 10, feature_flags: [...OCCUPIER_FREE, 'saved_searches', 'requirement_posting', 'toc_comparison', 'full_comparables'], quotas: { comparables: null }, price: 30000, status: 'Active' },
   { plan_code: 'BROKER_BASIC', name: 'Broker Basic', applies_to: 'Enabler', default_seat_limit: 3, feature_flags: BROKER_BASIC, quotas: { intro_registrations: 25 }, price: 10000, status: 'Active' },
+  // Internal: tracks and caps the AA team's seats. Features stay fully unlocked for the AA role (§7.3).
+  { plan_code: 'INTERNAL_ADVISORY', name: 'Internal – Advisory', applies_to: 'Advisory', default_seat_limit: 10, feature_flags: [], quotas: {}, price: 0, status: 'Active' },
   { plan_code: 'BROKER_PRO', name: 'Broker Pro', applies_to: 'Enabler', default_seat_limit: 15, feature_flags: [...BROKER_BASIC, 'full_listings', 'broker_pipeline'], quotas: { intro_registrations: 200 }, price: 40000, status: 'Active' },
 ]
 
 const organisations: Organisation[] = [
   { org_id: 'ORG-PT', name: 'PropTattva', type: 'PropTattva', enabler_type: null, status: 'Active', created_at: iso(-200) },
+  // The AA internal team is its own org: own users and CRM book; its access to mandated buildings comes from the AA role.
+  { org_id: 'ORG-AA', name: 'Asset Advantage', type: 'Advisory', enabler_type: null, status: 'Active', created_at: iso(-200) },
   { org_id: 'OWN-1', name: 'Northstar Estates', type: 'Owner', enabler_type: null, status: 'Active', created_at: iso(-120) },
   { org_id: 'OWN-2', name: 'Meridian Developers', type: 'Owner', enabler_type: null, status: 'Active', created_at: iso(-110) },
   { org_id: 'OWN-3', name: 'Trinity Realty', type: 'Owner', enabler_type: null, status: 'Active', created_at: iso(-90) },
@@ -36,6 +41,7 @@ const organisations: Organisation[] = [
 ]
 
 const subscriptions: Subscription[] = [
+  { subscription_id: 'SUB-ORG-AA', org_id: 'ORG-AA', plan_code: 'INTERNAL_ADVISORY', seat_limit: 10, start: date(-200), end: null, status: 'Active' },
   { subscription_id: 'SUB-OWN-1', org_id: 'OWN-1', plan_code: 'OWNER_ENTERPRISE', seat_limit: 50, start: date(-120), end: null, status: 'Active' },
   { subscription_id: 'SUB-OWN-2', org_id: 'OWN-2', plan_code: 'OWNER_GROWTH', seat_limit: 10, start: date(-110), end: date(255), status: 'Active' },
   { subscription_id: 'SUB-OWN-3', org_id: 'OWN-3', plan_code: 'OWNER_STARTER', seat_limit: 3, start: date(-90), end: date(275), status: 'Active' },
@@ -51,8 +57,8 @@ const u = (user_id: string, org_id: string, name: string, email: string, role: U
 
 const users: User[] = [
   u('U-ADMIN', 'ORG-PT', 'PT Admin', 'admin@proptattva.com', 'Super Admin', '+91 98450 10001', 0),
-  u('U-AA-1', 'ORG-PT', 'Ananya Rao', 'ananya.rao@proptattva.com', 'AA', '+91 98450 10002', 1),
-  u('U-AA-2', 'ORG-PT', 'Vikram Iyer', 'vikram.iyer@proptattva.com', 'AA', '+91 98450 10003', 3),
+  u('U-AA-1', 'ORG-AA', 'Ananya Rao', 'ananya.rao@assetadvantage.example', 'AA', '+91 98450 10002', 1),
+  u('U-AA-2', 'ORG-AA', 'Vikram Iyer', 'vikram.iyer@assetadvantage.example', 'AA', '+91 98450 10003', 3),
   u('U-OWN-1', 'OWN-1', 'Meera Kapoor', 'northstar@owner.com', 'Owner/Developer', '+91 98860 20001', 0),
   u('U-OWN-1B', 'OWN-1', 'Arjun Menon', 'arjun.menon@northstar.example', 'Owner/Developer', '+91 98860 20002', 9),
   u('U-OWN-2', 'OWN-2', 'Rahul Desai', 'meridian@owner.com', 'Owner/Developer', '+91 99000 30001', 2),
@@ -71,7 +77,7 @@ const invites: Invite[] = [
   { invite_id: 'INV-002', org_id: 'OWN-1', email: 'cfo@northstar.example', role: 'Owner/Developer', token: 'tk_3be07d51', expires_at: iso(6), status: 'Pending' },
   { invite_id: 'INV-003', org_id: 'OWN-2', email: 'ops@meridian.example', role: 'Owner/Developer', token: 'tk_c91e44aa', expires_at: iso(-3), status: 'Pending' },
   { invite_id: 'INV-004', org_id: 'OCC-1', email: 'facilities@acmegcc.example', role: 'Occupier', token: 'tk_77d0b2e9', expires_at: iso(-20), status: 'Accepted' },
-  { invite_id: 'INV-005', org_id: 'ORG-PT', email: 'new.analyst@proptattva.com', role: 'AA', token: 'tk_5a6f13c0', expires_at: iso(4), status: 'Pending' },
+  { invite_id: 'INV-005', org_id: 'ORG-AA', email: 'new.analyst@assetadvantage.example', role: 'AA', token: 'tk_5a6f13c0', expires_at: iso(4), status: 'Pending' },
 ]
 
 function seedAudit(): AuditEntry[] {
@@ -90,7 +96,7 @@ function seedAudit(): AuditEntry[] {
     e(12, 'U-ADMIN', 'ENB-2', 'Organisation', 'ENB-2', 'Atlas Brokerage', 'Update', { status: 'Active' }, { status: 'Suspended' }),
     e(6, 'U-ADMIN', 'OWN-4', 'Organisation', 'OWN-4', 'Harbour Holdings', 'Create', null, { name: 'Harbour Holdings', type: 'Owner', status: 'Pending' }),
     e(5, 'U-OWN-3', 'OWN-3', 'Invite', 'INV-001', 'leasing@trinity.example', 'Create', null, { email: 'leasing@trinity.example', role: 'Owner/Developer', status: 'Pending' }),
-    e(1, 'U-AA-1', 'ORG-PT', 'Session', 'U-AA-1', 'Ananya Rao', 'Login', null, null),
+    e(1, 'U-AA-1', 'ORG-AA', 'Session', 'U-AA-1', 'Ananya Rao', 'Login', null, null),
   ]
 }
 
@@ -107,5 +113,6 @@ export function createSeed(): PlatformDb {
     audit_log: seedAudit(),
     ...assets,
     ...phase4,
+    ...createCrmSeed(),
   }
 }

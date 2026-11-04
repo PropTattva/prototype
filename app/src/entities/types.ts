@@ -13,7 +13,9 @@ export type EntityKey =
   // leasing (E2–E4)
   | 'occupier' | 'lease' | 'leaseSpace' | 'renewal' | 'leaseDoc' | 'rent' | 'brokerLog' | 'relationshipLog'
   // mandate & GTM (E5), parking (E6)
-  | 'mandate' | 'vendor' | 'targetOccupier' | 'assessment' | 'assessmentCriterion' | 'opportunity' | 'bay' | 'parkingRate'
+  | 'mandate' | 'vendor' | 'targetOccupier' | 'assessment' | 'assessmentCriterion' | 'bay' | 'parkingRate'
+  // CRM (all personas)
+  | 'crmAccount' | 'crmContact' | 'crmActivity'
 
 export type FieldType =
   | 'text'

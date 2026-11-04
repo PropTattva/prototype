@@ -33,35 +33,47 @@ const I = {
   mandates: { path: 'mandates', label: 'Mandates', icon: '✦' },
   assessments: { path: 'assessments', label: 'Assessments', icon: '✓' },
   targets: { path: 'targets', label: 'Target occupiers', icon: '◎' },
-  pipeline: { path: 'pipeline', label: 'BD pipeline', icon: '◆' },
   vendors: { path: 'vendors', label: 'Vendors', icon: '⚙' },
   team: { path: 'team', label: 'Team & seats', icon: '◍' },
+  crmAccounts: { path: 'crm/accounts', label: 'Accounts', icon: '◧' },
+  crmContacts: { path: 'crm/contacts', label: 'Contacts', icon: '☺' },
+  crmActivities: { path: 'crm/activities', label: 'Activities', icon: '✎' },
+  crmPipeline: { path: 'crm/pipeline', label: 'BD pipeline', icon: '◆' },
   subscription: { path: 'subscription', label: 'Subscription', icon: '★' },
 }
+
+/** CRM: every persona keeps its own book of accounts, contacts and meetings. */
+const CRM: NavSection = { title: 'CRM', items: [I.crmActivities, I.crmAccounts, I.crmContacts, I.crmPipeline] }
 
 /** Sidebar per role. Screens still check access themselves; this only decides what is offered. */
 export function navFor(s: Session): NavSection[] {
   switch (s.role) {
     case 'Super Admin':
+      // The platform owner manages customers and supports them. Owner-only workspaces (portfolio, revenue at risk,
+      // renewals, ledger, vault…) stay reachable by URL and from a building or lease, but aren't PT Admin's own work.
       return [
-        { title: 'Admin console', items: [
-          { path: 'admin', label: 'Overview', icon: '◆' },
+        { title: 'Manage platform', items: [
+          { path: 'admin', label: 'Platform overview', icon: '◆' },
           { path: 'admin/organisations', label: 'Organisations', icon: '◫' },
           { path: 'admin/users', label: 'Users', icon: '◍' },
           { path: 'admin/invites', label: 'Invites', icon: '✉' },
-          { path: 'admin/plans', label: 'Plans', icon: '★' },
           { path: 'admin/subscriptions', label: 'Subscriptions', icon: '≡' },
-          { path: 'admin/audit', label: 'Audit log', icon: '◉' },
-          { path: 'admin/view-as', label: 'View as', icon: '⇆' },
+          { path: 'admin/plans', label: 'Plans', icon: '★' },
         ] },
-        { title: 'Assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking, I.owners] },
-        { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
-        { title: 'Mandates & BD', items: [I.mandates, I.assessments, I.targets, I.pipeline, I.vendors] },
-        { title: 'Vault', items: [I.vault, I.reminders, I.sharing] },
+        { title: 'Support', items: [
+          { path: 'admin/health', label: 'Data health', icon: '✚' },
+          { path: 'admin/view-as', label: 'View as', icon: '⇆' },
+          { path: 'admin/audit', label: 'Audit log', icon: '◉' },
+        ] },
+        { title: 'Customer data', items: [{ ...I.buildings, feature: undefined }, { ...I.leases, feature: undefined }, I.mandates, I.owners, I.brokers] },
+        { title: 'Master data', items: [I.occupiers, I.vendors] },
+        { title: 'Market', items: [{ ...I.availability, label: 'Availability' }, I.comparables] },
+        CRM,
       ]
     case 'AA':
       return [
-        { title: 'Mandates & BD', items: [I.pipeline, I.mandates, I.assessments, I.targets, I.vendors] },
+        CRM,
+        { title: 'Mandates', items: [I.mandates, I.assessments, I.targets, I.vendors] },
         { title: 'Mandated assets', items: [{ ...I.dash, label: 'Portfolio' }, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
         { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.comparables] },
         { title: 'Vault', items: [I.vault, I.reminders] },
@@ -71,6 +83,7 @@ export function navFor(s: Session): NavSection[] {
       return [
         { title: 'Portfolio', items: [I.dash, I.risk, I.campuses, I.buildings, I.stacking, I.availability, I.parking] },
         { title: 'Leasing', items: [I.leases, I.renewals, I.ledger, I.occupiers, I.brokers, I.mandates] },
+        CRM,
         { title: 'Vault', items: [I.vault, I.reminders, I.sharing, I.owners] },
         { title: 'Market', items: [I.comparables] },
         { title: 'Account', items: [I.team, I.subscription] },
@@ -78,12 +91,14 @@ export function navFor(s: Session): NavSection[] {
     case 'Occupier':
       return [
         { title: 'Discover', items: [{ path: 'home', label: 'Home', icon: '▣' }, { ...I.buildings, label: 'Buildings', feature: undefined }, I.availability, I.stacking, I.comparables] },
+        CRM,
         { title: 'Account', items: [I.team, I.subscription] },
       ]
     default:
       return [
         { title: 'Listings', items: [{ path: 'home', label: 'Home', icon: '▣' }, { ...I.buildings, label: 'Listings', feature: undefined }, I.availability, I.comparables] },
         { title: 'Introductions', items: [{ ...I.brokers, label: 'My introductions' }] },
+        CRM,
         { title: 'Account', items: [I.team, I.subscription] },
       ]
   }
@@ -95,7 +110,11 @@ export function homePath(s: Session) {
   return 'home'
 }
 
+/** Owner and AA workspaces the platform owner can still open (from a building, a lease, or by URL) for support. */
+const SUPPORT_ONLY = ['portfolio', 'revenue-at-risk', 'campuses', 'stacking', 'parking', 'renewals', 'ledger', 'vault', 'reminders', 'sharing', 'assessments', 'targets']
+
 /** Paths each role may open (first path segment). */
 export function allowedSections(s: Session): Set<string> {
-  return new Set(navFor(s).flatMap((sec) => sec.items.map((i) => i.path.split('/')[0])))
+  const paths = navFor(s).flatMap((sec) => sec.items.map((i) => i.path.split('/')[0]))
+  return new Set(s.role === 'Super Admin' ? [...paths, ...SUPPORT_ONLY] : paths)
 }
