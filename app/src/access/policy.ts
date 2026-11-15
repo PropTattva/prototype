@@ -94,11 +94,12 @@ export const CAPABILITIES: Record<Capability, Partial<Record<Role, Grant>>> = {
     AA: { actions: R, scope: 'mandated' },
     'Owner/Developer': { actions: CRUD, scope: 'own-org' },
   },
-  // §7.2 "Broker introduction log" — immutable, so no U/D for anyone.
+  // §7.2 "Broker introduction log" — immutable, so no U/D for anyone. Owners may also record introductions
+  // on their own buildings (e.g. from an off-platform broker); those entries are labelled "Recorded by owner".
   broker_log: {
     'Super Admin': { actions: R, scope: 'all' },
     AA: { actions: CR, scope: 'all' },
-    'Owner/Developer': { actions: R, scope: 'own-org' },
+    'Owner/Developer': { actions: CR, scope: 'own-org' },
     Enabler: { actions: CR, scope: 'own-broker' },
   },
   // Occupier reference catalogue (sector, GCC, parent — E3-S07..09), shared across tenants.

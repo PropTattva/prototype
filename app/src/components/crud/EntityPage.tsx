@@ -32,6 +32,8 @@ interface Props {
   onNew?: () => void
   newLabel?: string
   hideColumns?: string[]
+  /** Form fields not shown to this viewer (set by the server instead) */
+  hideFields?: string[]
   /** Client-side row filter applied after the api (e.g. category in the vault) */
   filter?: (row: Rec) => boolean
   emptyText?: string
@@ -39,7 +41,7 @@ interface Props {
 
 /** List + record drawer for one entity, driven entirely by the URL: base / base/new / base/:id / base/:id/edit. */
 export default function EntityPage(props: Props) {
-  const { entity, basePath, rest, title, subtitle, banner, linkTo, ownOrgOnly, embedded, where, rowHref, onNew, newLabel, hideColumns = [], filter, emptyText } = props
+  const { entity, basePath, rest, title, subtitle, banner, linkTo, ownOrgOnly, embedded, where, rowHref, onNew, newLabel, hideColumns = [], hideFields = [], filter, emptyText } = props
   const session = useAuthed()
   const def = entityDef(entity)
   const perms = api.permissions(entity, session)
@@ -93,7 +95,7 @@ export default function EntityPage(props: Props) {
           linkTo={linkTo}
           defaultOrgId={ownOrgOnly ? session.org.org_id : null}
           presets={where}
-          hideFields={ownOrgOnly && def.orgKey ? [def.orgKey] : []}
+          hideFields={[...hideFields, ...(ownOrgOnly && def.orgKey ? [def.orgKey] : [])]}
           onClose={() => navigate(basePath)}
           onMode={(m, id) => navigate(m === 'edit' ? `${basePath}/${encodeURIComponent(id!)}/edit` : `${basePath}/${encodeURIComponent(id!)}`)}
         />

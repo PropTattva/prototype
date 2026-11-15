@@ -3,6 +3,7 @@ import type { Session } from '../../access/session'
 import * as api from '../../data/api'
 import { ApiError } from '../../data/api'
 import { useApi } from '../../data/useApi'
+import { LEAD_HINT, parseReminderLead } from '../../entities/assets'
 import { entityDef } from '../../entities/registry'
 import type { EntityKey, OptionCtx, Rec } from '../../entities/types'
 import { href } from '../../state/router'
@@ -12,6 +13,17 @@ import { useToast } from '../ui/Toast'
 import { FieldInput, FieldValue } from './fields'
 
 export type DrawerMode = 'view' | 'edit' | 'create'
+
+/** Addable dropdowns (FieldDef.addable): how each one saves a new choice. */
+const ADD_OPTION: Partial<Record<string, (name: string, draft: Rec, s: Session) => Promise<string>>> = {
+  'document.type': (name, d, s) => api.addDocType(name, s, { buildingId: d.building_id, orgId: d.org_id }),
+  // A custom timing is just a value on the document, so nothing is saved until the form is.
+  'document.reminder_lead': async (text) => {
+    const lead = parseReminderLead(text)
+    if (!lead) throw new Error(LEAD_HINT)
+    return lead
+  },
+}
 
 export type LinkTo = (entity: EntityKey, id: string) => string | null
 
@@ -268,6 +280,7 @@ export default function RecordDrawer(props: Props) {
                   error={errors[f.key]}
                   disabled={(f.createOnly && mode === 'edit') || (f.adminOnly && session.role !== 'Super Admin')}
                   onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+                  onAddOption={ADD_OPTION[`${entity}.${f.key}`] && !session.readOnly ? (name) => ADD_OPTION[`${entity}.${f.key}`]!(name, draft, session) : undefined}
                 />
               ))}
             <button type="submit" className="hidden" />

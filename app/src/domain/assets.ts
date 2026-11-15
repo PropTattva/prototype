@@ -159,6 +159,13 @@ export interface BuildingImage {
 
 export type SharingScope = 'Private (owner + AA)' | 'Shared with prospects' | 'Public'
 
+/** ext: a document category an org added on top of DOC_TYPES. Retired types stay on documents that use them. */
+export interface CustomDocType {
+  org_id: string
+  name: string
+  active: boolean
+}
+
 export interface BuildingDocument {
   doc_id: string
   org_id: string

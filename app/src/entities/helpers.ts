@@ -1,6 +1,7 @@
 import type { Option, OptionCtx } from './types'
+import { uuid } from '../lib/uuid'
 
-export const shortId = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`
+export const shortId = (prefix: string) => `${prefix}-${uuid().slice(0, 8).toUpperCase()}`
 export const plural = (n: number, w: string, many = `${w}s`) => `${n} ${n === 1 ? w : many}`
 export const isLive = (s: { status: string }) => s.status === 'Active' || s.status === 'Trial'
 

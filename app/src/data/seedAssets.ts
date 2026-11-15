@@ -5,7 +5,7 @@ import raw from './mockData.json'
 import type { Dataset } from '../domain/legacy'
 import { DOC_TYPES } from '../domain/assets'
 import type {
-  Building, BuildingAmenity, BuildingDocument, BuildingFloor, Campus, CampusAmenity, Certification, DevelopmentStatus,
+  Building, BuildingAmenity, BuildingDocument, CustomDocType, BuildingFloor, Campus, CampusAmenity, Certification, DevelopmentStatus,
   DocumentShare, FloorUnit, HandoverCondition, InvestorType, Owner, OwnerContact, OwnershipHistory,
 } from '../domain/assets'
 import type { Lease, LeaseDoc, LeaseRenewal, LeaseSpace, Occupier, OccupierBrokerLog, RelationshipLog, RentInvoice } from '../domain/leasing'
@@ -373,11 +373,14 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
   ]
 
   const bOf = (id: string) => buildings.find((b) => b.building_id === id)!
+  const ownBuilding = buildings.find((b) => b.org_id === 'OWN-1')!
   const broker_log: OccupierBrokerLog[] = [
-    { log_id: 'BRK-001', occupier_id: occupierId('AYG'), broker_org_id: 'ENB-1', building_id: 'BLD-F-F5', owner_org_id: bOf('BLD-F-F5').org_id, timestamp: `${addDays(today, -32)}T10:12:00.000Z`, status: 'Registered', notes: '60–100k sq ft GCC expansion' },
-    { log_id: 'BRK-002', occupier_id: occupierId('AYG'), broker_org_id: 'ENB-2', building_id: 'BLD-F-F5', owner_org_id: bOf('BLD-F-F5').org_id, timestamp: `${addDays(today, -18)}T15:40:00.000Z`, status: 'Duplicate', notes: 'Same requirement; Crestline registered first' },
-    { log_id: 'BRK-003', occupier_id: occupierId('TYT'), broker_org_id: 'ENB-1', building_id: 'BLD-D-D6', owner_org_id: bOf('BLD-D-D6').org_id, timestamp: `${addDays(today, -9)}T09:05:00.000Z`, status: 'Registered', notes: 'Looking for 2 warm-shell floors' },
-    { log_id: 'BRK-004', occupier_id: occupierId('WNU'), broker_org_id: 'ENB-1', building_id: 'BLD-E-E9', owner_org_id: bOf('BLD-E-E9').org_id, timestamp: `${addDays(today, -200)}T11:00:00.000Z`, status: 'Expired', notes: 'Registration lapsed after 180 days' },
+    { log_id: 'BRK-001', occupier_id: occupierId('AYG'), broker_org_id: 'ENB-1', broker_name: null, building_id: 'BLD-F-F5', owner_org_id: bOf('BLD-F-F5').org_id, timestamp: `${addDays(today, -32)}T10:12:00.000Z`, status: 'Registered', recorded_by: 'Broker', notes: '60–100k sq ft GCC expansion' },
+    { log_id: 'BRK-002', occupier_id: occupierId('AYG'), broker_org_id: 'ENB-2', broker_name: null, building_id: 'BLD-F-F5', owner_org_id: bOf('BLD-F-F5').org_id, timestamp: `${addDays(today, -18)}T15:40:00.000Z`, status: 'Duplicate', recorded_by: 'Broker', notes: 'Same requirement; Crestline registered first' },
+    { log_id: 'BRK-003', occupier_id: occupierId('TYT'), broker_org_id: 'ENB-1', broker_name: null, building_id: 'BLD-D-D6', owner_org_id: bOf('BLD-D-D6').org_id, timestamp: `${addDays(today, -9)}T09:05:00.000Z`, status: 'Registered', recorded_by: 'Broker', notes: 'Looking for 2 warm-shell floors' },
+    { log_id: 'BRK-004', occupier_id: occupierId('WNU'), broker_org_id: 'ENB-1', broker_name: null, building_id: 'BLD-E-E9', owner_org_id: bOf('BLD-E-E9').org_id, timestamp: `${addDays(today, -200)}T11:00:00.000Z`, status: 'Expired', recorded_by: 'Broker', notes: 'Registration lapsed after 180 days' },
+    // An owner-recorded introduction from a broker who is not on the platform.
+    { log_id: 'BRK-005', occupier_id: occupierId('WNU'), broker_org_id: null, broker_name: 'Kestrel Realty', building_id: ownBuilding.building_id, owner_org_id: 'OWN-1', timestamp: `${addDays(today, -5)}T12:30:00.000Z`, status: 'Registered', recorded_by: 'Owner', notes: 'Walk-in via local agent; 25k sq ft bare shell' },
   ]
 
   // ---------------------------------------------------------------- documents, certifications, title chain
@@ -450,6 +453,12 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
     .filter((b) => b.status === 'Active' && rng(`${b.building_id}-am`).chance(0.5))
     .map((b, i) => ({ amenity_id: `BAM-${String(i + 1).padStart(3, '0')}`, org_id: b.org_id, building_id: b.building_id, type: 'Cafeteria', capacity: 250, notes: 'Ground floor, vendor-run' }))
 
+  // Northstar keeps a vault category of its own (custom document types).
+  const doc_types: CustomDocType[] = [{ org_id: 'OWN-1', name: 'DG Set Licence', active: true }]
+  for (const b of buildings.filter((x) => x.org_id === 'OWN-1' && x.status === 'Active').slice(0, 4)) {
+    documents.push({ doc_id: `DOC-${b.building_id.slice(4)}-DG`, org_id: b.org_id, building_id: b.building_id, type: 'DG Set Licence', file_ref: `${b.name.replace(/[^A-Za-z0-9]+/g, '_')}_DG_Set_Licence.pdf`, validity: addDays(today, 200 + documents.length % 300), sharing_scope: 'Private (owner + AA)', reminder_lead: '30 days' })
+  }
+
   const document_shares: DocumentShare[] = [
     { share_id: 'SHR-001', org_id: 'OWN-1', building_id: 'BLD-A-A1', scope: 'Single document', doc_id: documents.find((d) => d.building_id === 'BLD-A-A1')?.doc_id ?? null, category: null, email: 'counsel@lawfirm.example', access: 'View only', expires_at: addDays(today, 21), status: 'Active' },
     { share_id: 'SHR-002', org_id: 'OWN-1', building_id: 'BLD-A-A3', scope: 'Category', doc_id: null, category: 'Fire NOC', email: 'auditor@safety.example', access: 'Comment', expires_at: addDays(today, 60), status: 'Active' },
@@ -458,7 +467,7 @@ export function createAssetSeed(): Omit<PlatformDb, 'organisations' | 'users' | 
 
   return {
     campuses, owners, buildings, floors, units, building_amenities, campus_amenities, images: [], documents, certifications,
-    ownership_history, owner_contacts, document_shares,
+    ownership_history, owner_contacts, document_shares, doc_types,
     occupiers, leases, lease_spaces: spaces, renewals, lease_docs, rent_invoices, broker_log, relationship_log,
   }
 }

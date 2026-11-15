@@ -1,4 +1,5 @@
 // Read and edit renderers for every FieldType in the entity registry.
+import { useState } from 'react'
 import { featureLabel, QUOTA_KEYS, VISIBILITY_LABEL } from '../../access/policy'
 import type { Partner } from '../../domain/assets'
 import type { FieldDef, Option, OptionCtx, Rec } from '../../entities/types'
@@ -163,14 +164,64 @@ function PartnersInput({ value, onChange, disabled }: { value: Partner[]; onChan
   )
 }
 
-export function FieldInput({ f, draft, ctx, error, disabled, onChange }: {
+const ADD = '__add__'
+
+/** Inline "add a new value" row that replaces an addable dropdown while the user types. */
+function AddOption({ id, noun, placeholder, onAdd, onDone }: { id: string; noun: string; placeholder?: string; onAdd: (name: string) => Promise<string>; onDone: (value: string | null) => void }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const save = async () => {
+    setBusy(true)
+    try {
+      onDone(await onAdd(text))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div>
+      <div className="flex gap-1.5">
+        <input
+          id={id}
+          autoFocus
+          className={`input ${error ? 'border-crit' : ''}`}
+          placeholder={placeholder ?? `New ${noun}`}
+          value={text}
+          maxLength={40}
+          onChange={(e) => {
+            setText(e.target.value)
+            setError(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              if (text.trim()) save()
+            }
+            if (e.key === 'Escape') onDone(null)
+          }}
+        />
+        <button type="button" className="btn btn-primary" disabled={!text.trim() || busy} onClick={save}>Add</button>
+        <button type="button" className="btn" onClick={() => onDone(null)}>Cancel</button>
+      </div>
+      {error && <p className="mt-1 text-[11px] text-crit">{error}</p>}
+    </div>
+  )
+}
+
+export function FieldInput({ f, draft, ctx, error, disabled, onChange, onAddOption }: {
   f: FieldDef
   draft: Rec
   ctx: OptionCtx
   error?: string
   disabled?: boolean
   onChange: (value: unknown) => void
+  /** For addable fields: saves a new choice and returns the stored value */
+  onAddOption?: (name: string) => Promise<string>
 }) {
+  const [adding, setAdding] = useState(false)
   const id = `f-${f.key}`
   const v = draft[f.key]
   const cls = `input ${error ? 'border-crit focus:border-crit focus:ring-crit/15' : ''}`
@@ -180,8 +231,24 @@ export function FieldInput({ f, draft, ctx, error, disabled, onChange }: {
     case 'ref': {
       const opts = optionsFor(f, draft, ctx)
       const groups = [...new Set(opts.map((o) => o.group).filter(Boolean))] as string[]
+      const canAdd = !!(f.addable && onAddOption && !disabled)
+      if (canAdd && adding) {
+        input = (
+          <AddOption
+            id={id}
+            noun={f.addable!}
+            placeholder={f.placeholder}
+            onAdd={onAddOption!}
+            onDone={(value) => {
+              setAdding(false)
+              if (value) onChange(value)
+            }}
+          />
+        )
+        break
+      }
       input = (
-        <select id={id} className={cls} value={v ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value || null)}>
+        <select id={id} className={cls} value={v ?? ''} disabled={disabled} onChange={(e) => (e.target.value === ADD ? setAdding(true) : onChange(e.target.value || null))}>
           <option value="">Select…</option>
           {groups.length
             ? groups.map((g) => (
@@ -190,6 +257,7 @@ export function FieldInput({ f, draft, ctx, error, disabled, onChange }: {
                 </optgroup>
               ))
             : opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {canAdd && <option value={ADD}>+ Add new {f.addable}…</option>}
         </select>
       )
       break

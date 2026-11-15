@@ -98,12 +98,17 @@ export interface RentInvoice {
 export interface OccupierBrokerLog {
   log_id: string
   occupier_id: string
-  broker_org_id: string
+  /** Broker firm on the platform; null when an owner records an off-platform broker */
+  broker_org_id: string | null
+  /** ext: off-platform broker, recorded by the owner */
+  broker_name: string | null
   building_id: string
   /** ext: owning org of the building, so owners can read logs on their assets */
   owner_org_id: string
   timestamp: string
   status: 'Registered' | 'Duplicate' | 'Expired'
+  /** ext: who filed the entry — owner-recorded entries are labelled so they stay distinct from broker claims */
+  recorded_by: 'Broker' | 'Owner' | 'AA'
   notes: string | null
 }
 

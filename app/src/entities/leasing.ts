@@ -292,17 +292,19 @@ const brokerLog: EntityDef = {
   scopeVia: 'building',
   immutable: true,
   title: (r, ctx) => `${occupierName(ctx, r.occupier_id)} → ${buildingName(ctx, r.building_id)}`,
-  subtitle: (r, ctx) => `${ctx.organisations.find((o) => o.org_id === r.broker_org_id)?.name ?? 'Broker'} · ${r.status}`,
+  subtitle: (r, ctx) => `${ctx.organisations.find((o) => o.org_id === r.broker_org_id)?.name ?? r.broker_name ?? 'Broker'} · ${r.status}${r.recorded_by === 'Broker' ? '' : ` · recorded by ${r.recorded_by === 'Owner' ? 'owner' : 'AA'}`}`,
   fields: [
     { key: 'occupier_id', label: 'Occupier introduced', type: 'ref', options: (_d, ctx) => occupierOptions(ctx), required: true, column: true },
     { key: 'building_id', label: 'Building', type: 'ref', options: (_d, ctx) => buildingOptions(ctx), required: true, column: true },
-    { key: 'broker_org_id', label: 'Broker firm', type: 'ref', options: (_d, ctx) => orgOptions(ctx).filter((o) => o.group === 'Enabler'), required: true, column: true, adminOnly: true },
+    { key: 'broker_org_id', label: 'Broker firm', type: 'ref', options: (_d, ctx) => orgOptions(ctx).filter((o) => o.group === 'Enabler'), column: true, createOnly: true, help: 'A broker firm on PropTattva. Leave empty and fill "Off-platform broker" if they are not on the platform.' },
+    { key: 'broker_name', label: 'Off-platform broker', type: 'text', column: true, createOnly: true, placeholder: 'Firm or agent name', help: 'Only for a broker who is not on PropTattva.' },
     { key: 'timestamp', label: 'Registered at', type: 'datetime', system: true, column: true },
     { key: 'status', label: 'Status', type: 'enum', options: ['Registered', 'Duplicate', 'Expired'], system: true, column: true },
+    { key: 'recorded_by', label: 'Recorded by', type: 'enum', options: ['Broker', 'Owner', 'AA'], system: true, column: true },
     { key: 'notes', label: 'Requirement notes', type: 'textarea' },
   ],
-  filters: ['status', 'broker_org_id'],
-  searchKeys: ['notes'],
+  filters: ['status', 'recorded_by', 'broker_org_id'],
+  searchKeys: ['notes', 'broker_name'],
   newId: () => shortId('BRK'),
   derive: (d, db) => {
     const b = db.buildings.find((x) => x.building_id === d.building_id)
@@ -312,6 +314,12 @@ const brokerLog: EntityDef = {
     const cutoff = new Date(Date.now() - 180 * 86_400_000).toISOString()
     const prior = db.broker_log.find((x) => x.occupier_id === d.occupier_id && x.building_id === d.building_id && x.status === 'Registered' && x.timestamp >= cutoff)
     d.status = prior ? 'Duplicate' : 'Registered'
+  },
+  validate: (d) => {
+    const name = String(d.broker_name ?? '').trim()
+    if (!d.broker_org_id && !name) return { broker_org_id: 'Choose the broker firm, or enter an off-platform broker.' }
+    if (d.broker_org_id && name) return { broker_name: 'Pick a broker firm or enter an off-platform broker — not both.' }
+    return {}
   },
 }
 

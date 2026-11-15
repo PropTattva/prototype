@@ -1,7 +1,7 @@
 // Platform & access entities — field names follow the Alpha PRD §5 data dictionary verbatim.
 import type {
   Building, BuildingAmenity, BuildingDocument, BuildingFloor, BuildingImage, Campus, CampusAmenity, Certification,
-  DocumentShare, FloorUnit, Owner, OwnerContact, OwnershipHistory,
+  CustomDocType, DocumentShare, FloorUnit, Owner, OwnerContact, OwnershipHistory,
 } from './assets'
 import type { CrmAccount, CrmActivity, CrmContact, CrmPicklist } from './crm'
 import type { AssessmentCriterion, BuildingAssessment, Mandate, TargetOccupier, Vendor } from './mandates'
@@ -124,6 +124,8 @@ export interface PlatformDb {
   ownership_history: OwnershipHistory[]
   owner_contacts: OwnerContact[]
   document_shares: DocumentShare[]
+  /** ext: org-defined Compliance Vault categories */
+  doc_types: CustomDocType[]
   mandates: Mandate[]
   // leasing (E2–E4)
   occupiers: Occupier[]

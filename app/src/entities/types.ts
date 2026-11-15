@@ -1,5 +1,5 @@
 import type { Capability, Visibility } from '../access/policy'
-import type { Building, BuildingDocument, BuildingFloor, Campus, FloorUnit, Owner } from '../domain/assets'
+import type { Building, BuildingDocument, CustomDocType, BuildingFloor, Campus, FloorUnit, Owner } from '../domain/assets'
 import type { Lease, Occupier } from '../domain/leasing'
 import type { Mandate, Vendor } from '../domain/mandates'
 import type { Organisation, PlatformDb, SubscriptionPlan, User } from '../domain/platform'
@@ -53,6 +53,8 @@ export interface OptionCtx {
   leases: Lease[]
   users: User[]
   documents: BuildingDocument[]
+  /** Org-defined document categories the viewer can see (own org; every org for internal roles) */
+  docTypes: CustomDocType[]
   mandates: Mandate[]
   vendors: Vendor[]
   /** Internal roles only: every building's id and name, for picking a building to mandate */
@@ -80,6 +82,8 @@ export interface FieldDef {
   adminOnly?: boolean
   visibility?: Visibility
   showIf?: (draft: Rec) => boolean
+  /** The dropdown ends in "+ Add new …" so users can extend the list (noun shown, e.g. "document type") */
+  addable?: string
   help?: string
   placeholder?: string
   /** Shown as a table column */

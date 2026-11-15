@@ -3,7 +3,7 @@
 // Swapping in a real API later means re-implementing this file only.
 import { can, canSeeField, featureLabel, FEATURES, grantFor, type Action } from '../access/policy'
 import type { Session } from '../access/session'
-import type { Building } from '../domain/assets'
+import { DOC_TYPES, type Building } from '../domain/assets'
 import type { Lease } from '../domain/leasing'
 import type { CrmAccount, CrmActivity, CrmContact, PicklistKey, PicklistValue } from '../domain/crm'
 import type { Mandate, PricingInputs, Swot } from '../domain/mandates'
@@ -21,6 +21,7 @@ import { platformHealth, seatsOf, type HealthIssue } from '../lib/platformHealth
 import { priceModel } from '../lib/pricing'
 import { suggestSwot } from '../lib/swot'
 import { readDb, resetDb, writeDb } from './store'
+import { uuid } from '../lib/uuid'
 
 export type ApiErrorCode = 'FORBIDDEN' | 'NOT_FOUND' | 'VALIDATION' | 'QUOTA' | 'PLAN' | 'CONFLICT' | 'READ_ONLY' | 'AUTH'
 
@@ -143,7 +144,7 @@ export function resetDemoData() {
 
 function audit(actor: User, orgId: string | null, entity: string, entityId: string, label: string, action: AuditEntry['action'], before: Rec | null, after: Rec | null): AuditEntry {
   return {
-    audit_id: `AUD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+    audit_id: `AUD-${uuid().slice(0, 8).toUpperCase()}`,
     org_id: orgId,
     user_id: actor.user_id,
     on_behalf_of: null,
@@ -332,6 +333,7 @@ function scopedCtx(s: Session, db: PlatformDb): OptionCtx {
     occupiers: visible('occupier', s, db, f) as OptionCtx['occupiers'],
     leases: visible('lease', s, db, f) as OptionCtx['leases'],
     documents: visible('document', s, db, f) as OptionCtx['documents'],
+    docTypes: internal ? db.doc_types : db.doc_types.filter((t) => t.org_id === s.org.org_id),
     mandates: visible('mandate', s, db, f) as OptionCtx['mandates'],
     vendors: visible('vendor', s, db, f) as OptionCtx['vendors'],
     directory: internal ? db.buildings.map((b) => ({ building_id: b.building_id, name: b.name, org_id: b.org_id, campus_id: b.campus_id })) : [],
@@ -472,10 +474,11 @@ function prepareCreate(key: EntityKey, input: Rec, s: Session, db: PlatformDb): 
   if (key === 'organisation') draft.created_at = now()
   if (key === 'invite') {
     draft.status = 'Pending'
-    draft.token = `tk_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
+    draft.token = `tk_${uuid().replace(/-/g, '').slice(0, 8)}`
     draft.expires_at = new Date(Date.now() + 7 * 86_400_000).toISOString()
   }
   if (key === 'user') draft.last_login = null
+  if (key === 'brokerLog') draft.recorded_by = s.role === 'Enabler' ? 'Broker' : s.role === 'AA' ? 'AA' : 'Owner'
   if (key === 'subscription' && (draft.seat_limit == null || draft.seat_limit === ''))
     draft.seat_limit = db.plans.find((p) => p.plan_code === draft.plan_code)?.default_seat_limit ?? null
 
@@ -502,11 +505,12 @@ export async function create(key: EntityKey, input: Rec, s: Session): Promise<Re
     if (q.limit != null && q.used >= q.limit)
       throw new ApiError('QUOTA', `Building limit reached: ${q.used} of ${q.limit} buildings on ${q.planName}. Upgrade the plan to register more buildings.`)
   }
-  if (key === 'brokerLog') {
+  // The monthly quota is the broker firm's plan limit, so it counts only what the firm files itself.
+  if (key === 'brokerLog' && draft.recorded_by === 'Broker') {
     const sub = db.subscriptions.find((x) => x.org_id === draft.broker_org_id && isLive(x))
     const quota = db.plans.find((p) => p.plan_code === sub?.plan_code)?.quotas.intro_registrations
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
-    const used = db.broker_log.filter((l) => l.broker_org_id === draft.broker_org_id && l.timestamp >= since).length
+    const used = db.broker_log.filter((l) => l.broker_org_id === draft.broker_org_id && l.recorded_by === 'Broker' && l.timestamp >= since).length
     if (quota != null && used >= quota) throw new ApiError('QUOTA', `Introduction limit reached: ${used} of ${quota} this month. Upgrade to Broker Pro for more registrations.`)
   }
 
@@ -651,7 +655,7 @@ export async function resendInvite(id: string, s: Session) {
     const i = d.invites.find((x) => x.invite_id === id)!
     const before = { status: i.status, expires_at: i.expires_at }
     i.status = 'Pending'
-    i.token = `tk_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`
+    i.token = `tk_${uuid().replace(/-/g, '').slice(0, 8)}`
     i.expires_at = new Date(Date.now() + 7 * 86_400_000).toISOString()
     d.audit_log.push(audit(s.actor, i.org_id, 'Invite', id, i.email, 'Update', before, { status: i.status, expires_at: i.expires_at }))
   })
@@ -1473,6 +1477,60 @@ export async function auditExport(entity: string, label: string, s: Session) {
 }
 
 export const daysUntil = (iso: string) => daysBetween(todayIso(), iso)
+
+// ---------------------------------------------------------------- document types (Compliance Vault)
+
+/**
+ * Org whose vault categories change. Customers always edit their own; AA and Super Admin name the org
+ * (or a building of it) and must be able to upload documents there.
+ */
+function docTypeOrg(s: Session, target: { orgId?: string | null; buildingId?: string | null }): string {
+  const def = REGISTRY.document
+  requireWritable(s)
+  requireGrant(def, s, 'C')
+  requireFeature(def, s)
+  if (grantFor(def.capability, s.role)?.scope === 'own-org') return s.org.org_id
+  const db = readDb()
+  const f = scopeFacts(db)
+  const buildings = db.buildings.filter((b) => (target.buildingId ? b.building_id === target.buildingId : b.org_id === target.orgId))
+  const ok = buildings.find((b) => inRowScope(REGISTRY.building, s, b as unknown as Rec, f))
+  if (!ok) throw new ApiError('FORBIDDEN', 'Choose a building (or organisation) whose documents you manage.')
+  requireActable(def, s, { building_id: ok.building_id, org_id: ok.org_id }, f)
+  return ok.org_id
+}
+
+const cleanTypeName = (v: string) => v.trim().replace(/\s+/g, ' ')
+
+/** Add a vault category for the whole org (or bring back a retired one). Returns the stored name. */
+export async function addDocType(name: string, s: Session, target: { orgId?: string | null; buildingId?: string | null } = {}): Promise<string> {
+  const org = docTypeOrg(s, target)
+  const v = cleanTypeName(name)
+  if (v.length < 2) throw new ApiError('VALIDATION', 'Enter a document type name.')
+  if (v.length > 40) throw new ApiError('VALIDATION', 'Keep document type names under 40 characters.')
+  const std = DOC_TYPES.find((t) => t.toLowerCase() === v.toLowerCase())
+  if (std) throw new ApiError('CONFLICT', `${std} is already a standard document type.`)
+  const existing = readDb().doc_types.find((t) => t.org_id === org && t.name.toLowerCase() === v.toLowerCase())
+  if (existing?.active) throw new ApiError('CONFLICT', `${existing.name} already exists.`)
+  writeDb((d) => {
+    const row = d.doc_types.find((t) => t.org_id === org && t.name === existing?.name)
+    if (row) row.active = true
+    else d.doc_types.push({ org_id: org, name: v, active: true })
+    d.audit_log.push(audit(s.actor, org, 'DocumentType', `${org}:${existing?.name ?? v}`, existing?.name ?? v, existing ? 'Update' : 'Create', existing ? { active: false } : null, { name: existing?.name ?? v, active: true }))
+  })
+  return existing?.name ?? v
+}
+
+/** Retire (hide from new uploads) or restore a category. Documents already filed under it keep it. */
+export async function setDocTypeActive(name: string, active: boolean, s: Session, orgId?: string | null) {
+  const org = docTypeOrg(s, { orgId: orgId ?? s.org.org_id })
+  const row = readDb().doc_types.find((t) => t.org_id === org && t.name === name)
+  if (!row) throw new ApiError('NOT_FOUND', `${name} not found.`)
+  if (row.active === active) return
+  writeDb((d) => {
+    d.doc_types.find((t) => t.org_id === org && t.name === name)!.active = active
+    d.audit_log.push(audit(s.actor, org, 'DocumentType', `${org}:${name}`, name, 'Update', { active: !active }, { active }))
+  })
+}
 
 // ---------------------------------------------------------------- platform owner: manage & support
 

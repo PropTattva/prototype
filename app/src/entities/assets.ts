@@ -9,6 +9,27 @@ import type { EntityDef, EntityKey, Option, OptionCtx, Rec } from './types'
 const AMENITY_TYPES = ['Cafeteria', 'Food court', 'Crèche', 'Gym', 'Conference', 'Hotel proximity', 'Other']
 export const SHARING_SCOPES = ['Private (owner + AA)', 'Shared with prospects', 'Public']
 export const REMINDER_LEADS = ['7 days', '30 days', '3 months', '6 months', '12 months', '18 months']
+const LEAD_UNITS = { day: 1, week: 7, month: 30 } as const
+export const MAX_LEAD_MONTHS = 24
+export const MAX_LEAD_DAYS = MAX_LEAD_MONTHS * LEAD_UNITS.month
+
+/** How many days before expiry a reminder timing ("45 days", "2 weeks", "9 months") fires. */
+export function reminderLeadDays(lead: string): number {
+  const [n, unit = 'days'] = lead.split(' ')
+  return Number(n) * (LEAD_UNITS[unit.replace(/s$/, '') as keyof typeof LEAD_UNITS] ?? 1)
+}
+
+/** Read a custom timing ("45", "45d", "2 weeks", "9 mo") as "45 days" / "2 weeks" / "9 months"; null if invalid or over 24 months. */
+export function parseReminderLead(text: string): string | null {
+  const m = text.trim().toLowerCase().match(/^(\d{1,3})\s*(d|days?|w|wks?|weeks?|m|mos?|mths?|months?)?$/)
+  if (!m) return null
+  const n = Number(m[1])
+  const unit = !m[2] || m[2].startsWith('d') ? 'day' : m[2].startsWith('w') ? 'week' : 'month'
+  const lead = `${n} ${unit}${n === 1 ? '' : 's'}`
+  return n >= 1 && reminderLeadDays(lead) <= MAX_LEAD_DAYS ? lead : null
+}
+
+export const LEAD_HINT = 'Enter a timing like "45 days", "2 weeks" or "9 months" (up to 24 months).'
 
 const ownerOrgOptions = (_d: Rec, ctx: OptionCtx) => orgOptions(ctx).filter((o) => o.group === 'Owner')
 const buildingField = { key: 'building_id', label: 'Building', type: 'ref' as const, options: (_d: Rec, ctx: OptionCtx) => buildingOptions(ctx), required: true, createOnly: true, column: true }
@@ -400,6 +421,26 @@ const image: EntityDef = {
   },
 }
 
+/** Org whose document categories apply: the record's org, else its building's, else the viewer's only org. */
+function docOrg(d: Rec, ctx: OptionCtx): string | null {
+  if (d.org_id) return d.org_id
+  const b = ctx.buildings.find((x) => x.building_id === d.building_id)
+  if (b) return b.org_id
+  const orgs = new Set(ctx.buildings.map((x) => x.org_id))
+  return orgs.size === 1 ? [...orgs][0] : null
+}
+
+/** Standard vault categories plus the org's own. A retired type stays selectable on a record that already has it. */
+export function docTypeOptions(ctx: OptionCtx, orgId: string | null, current?: string | null): Option[] {
+  const own = ctx.docTypes.filter((t) => t.org_id === orgId)
+  const out: Option[] = [
+    ...DOC_TYPES.map((v) => ({ value: v, label: v, group: 'Standard' })),
+    ...own.filter((t) => t.active).map((t) => ({ value: t.name, label: t.name, group: 'Added by your team' })),
+  ]
+  if (current && !out.some((o) => o.value === current)) out.push({ value: current, label: `${current} (retired)`, group: 'Added by your team' })
+  return out
+}
+
 const document: EntityDef = {
   key: 'document',
   name: 'BuildingDocument',
@@ -417,16 +458,26 @@ const document: EntityDef = {
   subtitle: (r, ctx) => buildingName(ctx, r.building_id),
   fields: [
     buildingField,
-    { key: 'type', label: 'Document type', type: 'enum', options: DOC_TYPES, required: true, column: true },
+    { key: 'type', label: 'Document type', type: 'enum', options: (d, ctx) => docTypeOptions(ctx, docOrg(d, ctx), d.type), required: true, column: true, addable: 'document type', help: 'Not in the list? Pick "+ Add new document type…" — it becomes available to your whole team.' },
     { key: 'file_ref', label: 'File', type: 'file', column: true },
     { key: 'validity', label: 'Valid until', type: 'date', column: true, help: 'Blank for documents that do not expire (e.g. title, OC).' },
     { key: 'sharing_scope', label: 'Sharing', type: 'enum', options: SHARING_SCOPES, required: true, column: true },
-    { key: 'reminder_lead', label: 'Remind me before expiry', type: 'enum', options: REMINDER_LEADS, required: true },
+    {
+      key: 'reminder_lead',
+      label: 'Remind me before expiry',
+      type: 'enum',
+      // Standard timings, plus the record's own custom one.
+      options: (d) => [...REMINDER_LEADS.map((v) => ({ value: v, label: v })), ...(d.reminder_lead && !REMINDER_LEADS.includes(d.reminder_lead) ? [{ value: d.reminder_lead, label: `${d.reminder_lead} (custom)` }] : [])],
+      required: true,
+      addable: 'custom timing',
+      placeholder: 'e.g. 45 days, 2 weeks, 9 months',
+    },
   ],
   filters: ['type', 'sharing_scope'],
   searchKeys: ['type', 'file_ref'],
   newId: () => shortId('DOC'),
   defaults: () => ({ sharing_scope: 'Private (owner + AA)', reminder_lead: '30 days' }),
+  validate: (d) => (d.reminder_lead && !REMINDER_LEADS.includes(d.reminder_lead) && parseReminderLead(d.reminder_lead) !== d.reminder_lead ? { reminder_lead: LEAD_HINT } : {}),
   derive: inheritFromBuilding,
   deleteHint: 'Documents are never deleted in the vault — upload a renewed version instead.',
 }
@@ -543,7 +594,7 @@ const documentShare: EntityDef = {
     { key: 'scope', label: 'Scope', type: 'enum', options: ['Single document', 'Category', 'Building folder'], required: true, column: true },
     { key: 'building_id', label: 'Building', type: 'ref', options: (_d, ctx) => buildingOptions(ctx), column: true, help: 'Blank = across all your buildings (category shares only).' },
     { key: 'doc_id', label: 'Document', type: 'ref', options: docOptions, showIf: (d) => d.scope === 'Single document' },
-    { key: 'category', label: 'Category', type: 'enum', options: DOC_TYPES, showIf: (d) => d.scope === 'Category' },
+    { key: 'category', label: 'Category', type: 'enum', options: (d, ctx) => docTypeOptions(ctx, docOrg(d, ctx), d.category), showIf: (d) => d.scope === 'Category' },
     { key: 'access', label: 'Access', type: 'enum', options: ['View only', 'Comment', 'Upload / Edit'], required: true, column: true },
     { key: 'expires_at', label: 'Expires', type: 'date', column: true, help: 'Blank = never.' },
     { key: 'status', label: 'Status', type: 'enum', options: ['Active', 'Revoked'], required: true, column: true },

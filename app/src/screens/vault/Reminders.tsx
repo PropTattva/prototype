@@ -3,7 +3,7 @@ import * as api from '../../data/api'
 import { useApi } from '../../data/useApi'
 import type { BuildingDocument, Certification } from '../../domain/assets'
 import type { Lease } from '../../domain/leasing'
-import { REMINDER_LEADS } from '../../entities/assets'
+import { MAX_LEAD_MONTHS, REMINDER_LEADS, reminderLeadDays as leadDays } from '../../entities/assets'
 import { buildingName, occupierName } from '../../entities/helpers'
 import { daysFromToday, fmtDate } from '../../lib/dates'
 import { href } from '../../state/router'
@@ -11,11 +11,6 @@ import { useAuthed } from '../../state/SessionContext'
 import Badge, { type Tone } from '../../components/ui/Badge'
 import PageHeader from '../../components/ui/PageHeader'
 import { useToast } from '../../components/ui/Toast'
-
-const leadDays = (lead: string) => {
-  const [n, unit] = lead.split(' ')
-  return unit.startsWith('day') ? Number(n) : Number(n) * 30
-}
 
 interface Item {
   key: string
@@ -35,6 +30,8 @@ export default function Reminders() {
   const session = useAuthed()
   const toast = useToast()
   const [horizon, setHorizon] = useState(365)
+  // The document whose custom timing is being typed, and the draft value.
+  const [custom, setCustom] = useState<{ docId: string; n: string; unit: 'days' | 'weeks' | 'months' } | null>(null)
   const canDocs = api.permissions('document', session).read
   const canLeases = api.permissions('lease', session).read
   const { data } = useApi(async () => {
@@ -60,6 +57,18 @@ export default function Reminders() {
     return out.filter((i) => daysFromToday(i.date) <= horizon).sort((a, b) => a.date.localeCompare(b.date))
   }, [data, horizon])
 
+  const setLead = async (doc: BuildingDocument, lead: string) => {
+    try {
+      await api.update('document', doc.doc_id, { reminder_lead: lead }, session)
+      toast('ok', `Reminder set to ${lead} before expiry.`)
+      return true
+    } catch (e) {
+      const err = e as api.ApiError
+      toast('error', err.fieldErrors?.reminder_lead ?? err.message)
+      return false
+    }
+  }
+
   if (!data) return null
   const firing = items.filter((i) => daysFromToday(i.date) <= leadDays(i.lead))
   const canEdit = api.permissions('document', session).update
@@ -68,7 +77,7 @@ export default function Reminders() {
     <>
       <PageHeader
         title="Reminders"
-        subtitle="You choose the timing for statutory documents · lease alerts follow the 12-month rule"
+        subtitle={`You choose the timing for statutory documents — a standard one or your own, up to ${MAX_LEAD_MONTHS} months · lease alerts follow the 12-month rule`}
         right={
           <select className="input w-auto" value={horizon} onChange={(e) => setHorizon(Number(e.target.value))} aria-label="Horizon">
             <option value={90}>Next 3 months</option>
@@ -99,22 +108,53 @@ export default function Reminders() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="mr-1 text-[10px] font-bold uppercase text-ink-muted">Remind me:</span>
                   {REMINDER_LEADS.map((t) => (
-                    <button
-                      key={t}
-                      disabled={!canEdit}
-                      onClick={async () => {
-                        try {
-                          await api.update('document', i.doc!.doc_id, { reminder_lead: t }, session)
-                          toast('ok', `Reminder set to ${t} before expiry.`)
-                        } catch (e) {
-                          toast('error', (e as Error).message)
-                        }
-                      }}
-                      className={`btn px-2 py-0.5 text-[11px] ${t === i.lead ? 'btn-primary' : ''}`}
-                    >
+                    <button key={t} disabled={!canEdit} onClick={() => setLead(i.doc!, t)} className={`btn px-2 py-0.5 text-[11px] ${t === i.lead ? 'btn-primary' : ''}`}>
                       {t}{t === i.lead ? ' ✓' : ''}
                     </button>
                   ))}
+                  {custom?.docId === i.doc.doc_id ? (
+                    <form
+                      className="flex items-center gap-1"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        const n = Number(custom.n)
+                        setLead(i.doc!, `${n} ${n === 1 ? custom.unit.slice(0, -1) : custom.unit}`).then((ok) => ok && setCustom(null))
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        aria-label="Custom reminder amount"
+                        type="number"
+                        min={1}
+                        className="input w-16 px-2 py-0.5 text-[11px]"
+                        value={custom.n}
+                        onChange={(e) => setCustom({ ...custom, n: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Escape' && setCustom(null)}
+                      />
+                      <select aria-label="Custom reminder unit" className="input w-auto px-2 py-0.5 text-[11px]" value={custom.unit} onChange={(e) => setCustom({ ...custom, unit: e.target.value as 'days' | 'weeks' | 'months' })}>
+                        <option value="days">days</option>
+                        <option value="weeks">weeks</option>
+                        <option value="months">months</option>
+                      </select>
+                      <span className="text-[11px] text-ink-muted">before</span>
+                      <button type="submit" className="btn btn-primary px-2 py-0.5 text-[11px]" disabled={!(Number(custom.n) >= 1)}>Set</button>
+                      <button type="button" className="btn px-2 py-0.5 text-[11px]" onClick={() => setCustom(null)}>Cancel</button>
+                    </form>
+                  ) : REMINDER_LEADS.includes(i.lead) ? (
+                    <button disabled={!canEdit} onClick={() => setCustom({ docId: i.doc!.doc_id, n: '', unit: 'days' })} className="btn px-2 py-0.5 text-[11px]">Custom…</button>
+                  ) : (
+                    <button
+                      disabled={!canEdit}
+                      title="Custom timing — click to change"
+                      onClick={() => {
+                        const [n, unit] = i.lead.split(' ')
+                        setCustom({ docId: i.doc!.doc_id, n, unit: (unit.endsWith('s') ? unit : `${unit}s`) as 'days' | 'weeks' | 'months' })
+                      }}
+                      className="btn btn-primary px-2 py-0.5 text-[11px]"
+                    >
+                      {i.lead} ✓ <span className="font-normal opacity-80">custom</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="text-[11px] text-ink-muted">Reminder {i.lead} before{i.kind === 'Lease expiry' ? ', then monthly' : ''}</div>
