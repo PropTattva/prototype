@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { hasFeature, listSignInDirectory, resetDemoData } from '../../data/api'
 import { useApi } from '../../data/useApi'
 import { href, useRoute } from '../../state/router'
@@ -24,10 +24,30 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const route = useRoute().join('/')
   const sections = navFor(session)
   const active = (path: string) => route === path || (route.startsWith(`${path}/`) && path !== 'admin')
+  // The menu item this page belongs to; a new one opens at the top (record drawers keep the list's scroll).
+  const section = sections.flatMap((s) => s.items).filter((i) => active(i.path)).sort((a, b) => b.path.length - a.path.length)[0]?.path ?? route
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    // Bring the highlighted menu item into view if it is hidden (e.g. after a reload or a shared link);
+    // a click from the menu leaves the sidebar where it is.
+    const item = document.querySelector('aside [aria-current="page"]')
+    const box = item?.closest('aside')?.getBoundingClientRect()
+    const r = item?.getBoundingClientRect()
+    if (item && box && r && (r.top < box.top || r.bottom > box.bottom)) item.scrollIntoView({ block: 'center' })
+  }, [section])
+  // The sidebar sticks below the top bar, whose height grows with the View-as banner.
+  const top = useRef<HTMLDivElement>(null)
+  const [topH, setTopH] = useState(56)
+  useEffect(() => {
+    if (!top.current) return
+    const ro = new ResizeObserver(([e]) => setTopH(e.target.getBoundingClientRect().height))
+    ro.observe(top.current)
+    return () => ro.disconnect()
+  }, [])
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-40">
+    <div className="min-h-screen" style={{ '--shell-top': `${topH}px` } as CSSProperties}>
+      <div ref={top} className="sticky top-0 z-40">
         {session.readOnly && (
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-gold px-4 py-1.5 text-center text-xs font-semibold text-white">
             <span>
@@ -48,7 +68,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <div className="grid md:grid-cols-[220px_1fr]">
-        <aside className="min-w-0 border-b border-line bg-white md:min-h-[calc(100vh-56px)] md:border-b-0 md:border-r md:px-3 md:py-5">
+        <aside className="min-w-0 border-b border-line bg-white md:sticky md:top-[var(--shell-top)] md:h-[calc(100vh-var(--shell-top))] md:self-start md:overflow-y-auto md:overscroll-contain md:border-b-0 md:border-r md:px-3 md:py-5">
           <nav className="flex gap-1 overflow-x-auto px-3 py-2 md:block md:px-0 md:py-0">
             {sections.map((s) => (
               <div key={s.title} className="contents md:block">
@@ -57,6 +77,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   <a
                     key={i.path}
                     href={href(i.path)}
+                    onClick={() => window.scrollTo(0, 0)}
+                    aria-current={i.path === section ? 'page' : undefined}
                     className={`mb-0.5 flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-md px-3 py-2 text-[13px] font-medium ${
                       active(i.path) ? 'bg-royal text-white' : 'text-ink-soft hover:bg-royal-soft hover:text-royal'
                     }`}
