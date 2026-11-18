@@ -44,7 +44,7 @@ First task: confirm the structure, generate `mockData` from the demo dataset, sc
 ---
 
 ## Project layout (as built)
-- The app lives in `app/`. Run `cd app && npm run dev`. The repo root `index.html` (landing page) and `PT_Demo_v6.html` are served by GitHub Pages (CNAME proptattva.com); the Pages workflow publishes the app at `/app/`.
+- The app lives in `app/`. Run `cd app && npm run dev`. The repo root `index.html` (landing page) and `PT_Demo_v6.html` are served by GitHub Pages (CNAME proptattva.com); the landing page links to neither demo. The Pages workflow publishes both only under a private path from the `DEMO_PATH` repo secret: `/<DEMO_PATH>/app/` and `/<DEMO_PATH>/PT_Demo_v6.html`. The repo is public, so never write that path into a committed file.
 - `app/src/data/api.ts` is the mock server and the only way screens touch data. It enforces role × row scope × field visibility × plan limits, removing hidden fields from responses, and writes the audit log. To swap in a real backend, re-implement this file.
 - `app/src/data/store.ts` holds platform records in localStorage (`pt-demo-db`, versioned; bump `VERSION` when the shape changes). Seed data is in `data/seed.ts`.
 - `app/src/access/policy.ts` encodes PRD §7: the role × action matrix, per-field visibility rules, features and quotas.

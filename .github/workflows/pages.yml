@@ -27,11 +27,18 @@ jobs:
       - name: Build prototype app
         working-directory: app
         run: npm ci && npm run build
-      - name: Assemble site (legacy demo at root, new app at /app)
+      # Demos are not linked publicly. They are published only under a private
+      # path held in the DEMO_PATH repo secret (the repo is public, so the path
+      # must never be written in this file).
+      - name: Assemble site (landing page at root, demos under private path)
+        env:
+          DEMO_PATH: ${{ secrets.DEMO_PATH }}
         run: |
-          mkdir -p _site/app
-          cp index.html PT_Demo_v6.html CNAME _site/
-          cp -r app/dist/. _site/app/
+          if [ -z "$DEMO_PATH" ]; then echo "DEMO_PATH secret is not set" >&2; exit 1; fi
+          mkdir -p "_site/$DEMO_PATH/app"
+          cp index.html CNAME _site/
+          cp PT_Demo_v6.html "_site/$DEMO_PATH/"
+          cp -r app/dist/. "_site/$DEMO_PATH/app/"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
